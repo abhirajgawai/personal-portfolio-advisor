@@ -60,3 +60,16 @@ def _currency_exposure(holdings: list[dict]) -> dict:
         currency: {"value_base": value, "pct_of_portfolio": value / total * 100}
         for currency, value in totals.items()
     }
+
+
+def _liquidity_split(holdings: list[dict]) -> dict:
+    total = sum(h["market_value_base"] for h in holdings)
+    illiquid = sum(
+        h["market_value_base"] for h in holdings if h["asset_class"] == "real_estate"
+    )
+    liquid = total - illiquid
+
+    return {
+        "illiquid": {"value_base": illiquid, "pct_of_portfolio": illiquid / total * 100},
+        "liquid": {"value_base": liquid, "pct_of_portfolio": liquid / total * 100},
+    }

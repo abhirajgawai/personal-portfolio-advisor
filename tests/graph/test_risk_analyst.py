@@ -92,3 +92,14 @@ def test_currency_exposure_computes_correct_totals():
     assert result["INR"]["pct_of_portfolio"] == pytest.approx(90.0)
     assert result["USD"]["value_base"] == pytest.approx(10000.0)
     assert result["USD"]["pct_of_portfolio"] == pytest.approx(10.0)
+
+
+def test_liquidity_split_separates_real_estate():
+    from agentic_frameworks.graph.nodes.risk_analyst import _liquidity_split
+
+    result = _liquidity_split(HOLDINGS)
+
+    assert result["illiquid"]["value_base"] == pytest.approx(40000.0)
+    assert result["illiquid"]["pct_of_portfolio"] == pytest.approx(40.0)
+    assert result["liquid"]["value_base"] == pytest.approx(60000.0)
+    assert result["liquid"]["pct_of_portfolio"] == pytest.approx(60.0)
