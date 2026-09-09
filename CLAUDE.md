@@ -21,6 +21,7 @@ This is a learning project first, a working system second. The user (Abhi) wants
 - Build happens in phases (e.g., one LangGraph node, one MCP server, one Temporal workflow — matches the "one piece at a time" rule above).
 - Each phase ends with real testing before it's considered done — test cases (pytest against real data, no mocks of `portfolio.db`) and, for anything with a UI/browser surface, Playwright.
 - Planning the next phase does not start until the current phase's tests pass. No "we'll test it later" or parallel phase-planning-while-untested.
+- Once a phase's tests pass and its branch is merged to `main`, push `main` to GitHub before starting the next phase's brainstorming. Commits and pushes happen per phase, not batched across multiple phases and not held back for a later "big push."
 
 ## What this project is
 
