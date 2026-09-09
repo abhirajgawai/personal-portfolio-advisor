@@ -97,6 +97,13 @@ For each of the five pieces above, explicitly answer before moving on:
 3. **What did it make hard or awkward?**
 4. **When would you reach for this in a real job?**
 
+**Plus a 6th checkpoint — Governance.** Not a separate stack piece, but a concept its own right, served by three mechanisms already in this plan rather than by new code:
+- **Policy enforcement** — the New-Buy Conviction Gate (portfolio-fit → fundamentals → valuation → style-fit, reject-early) is a policy layer: no candidate reaches output without clearing explicit rules.
+- **Audit trail** — decision logs written to `agent_memory.db` record what the graph decided and why, on every run.
+- **Cost/usage tracking** — LangSmith traces capture token cost and latency per node, per run.
+
+Honest gap: there's no access-control or compliance layer (who's allowed to approve, regulatory sign-off, etc.) — reasonable to skip for a solo local tool, but worth stating explicitly rather than leaving unaddressed.
+
 ## Verification
 
 - The graph runs end-to-end against your real `portfolio.db` (read-only) and produces output referencing your actual holdings (not fabricated/placeholder tickers) — plus either a genuinely researched new-buy candidate that clears the Conviction Gate, or an explicit "no good candidate this cycle" with the reasons it was rejected.
