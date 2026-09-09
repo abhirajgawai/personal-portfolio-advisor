@@ -7,6 +7,8 @@ Reports raw numbers only; no thresholds or verdicts.
 
 from __future__ import annotations
 
+from agentic_frameworks.graph.state import ResearchState, RiskState
+
 
 def _concentration(holdings: list[dict]) -> dict:
     total = sum(h["market_value_base"] for h in holdings)
@@ -75,7 +77,7 @@ def _liquidity_split(holdings: list[dict]) -> dict:
     }
 
 
-def risk_analyst_node(state: dict) -> dict:
+def risk_analyst_node(state: ResearchState) -> RiskState:
     holdings = state["holdings"]
     return {
         "concentration": _concentration(holdings),
