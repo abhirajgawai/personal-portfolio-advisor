@@ -81,3 +81,14 @@ def test_category_overlap_includes_only_shared_sectors():
 
     small_cap_asset_classes = {h["asset_class"] for h in result["by_sector"]["Small Cap"]}
     assert small_cap_asset_classes == {"mutual_fund", "etf"}
+
+
+def test_currency_exposure_computes_correct_totals():
+    from agentic_frameworks.graph.nodes.risk_analyst import _currency_exposure
+
+    result = _currency_exposure(HOLDINGS)
+
+    assert result["INR"]["value_base"] == pytest.approx(90000.0)
+    assert result["INR"]["pct_of_portfolio"] == pytest.approx(90.0)
+    assert result["USD"]["value_base"] == pytest.approx(10000.0)
+    assert result["USD"]["pct_of_portfolio"] == pytest.approx(10.0)
