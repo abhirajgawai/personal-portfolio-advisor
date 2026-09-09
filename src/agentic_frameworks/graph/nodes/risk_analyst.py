@@ -7,6 +7,8 @@ Reports raw numbers only; no thresholds or verdicts.
 
 from __future__ import annotations
 
+from agentic_frameworks.graph.state import ResearchState, RiskState
+
 
 def _concentration(holdings: list[dict]) -> dict:
     total = sum(h["market_value_base"] for h in holdings)
@@ -46,3 +48,40 @@ def _category_overlap(holdings: list[dict]) -> dict:
 
     overlapping = {sector: entries for sector, entries in by_sector.items() if len(entries) > 1}
     return {"by_sector": overlapping}
+
+
+def _currency_exposure(holdings: list[dict]) -> dict:
+    total = sum(h["market_value_base"] for h in holdings)
+
+    totals: dict[str, float] = {}
+    for h in holdings:
+        totals.setdefault(h["currency"], 0.0)
+        totals[h["currency"]] += h["market_value_base"]
+
+    return {
+        currency: {"value_base": value, "pct_of_portfolio": value / total * 100}
+        for currency, value in totals.items()
+    }
+
+
+def _liquidity_split(holdings: list[dict]) -> dict:
+    total = sum(h["market_value_base"] for h in holdings)
+    illiquid = sum(
+        h["market_value_base"] for h in holdings if h["asset_class"] == "real_estate"
+    )
+    liquid = total - illiquid
+
+    return {
+        "illiquid": {"value_base": illiquid, "pct_of_portfolio": illiquid / total * 100},
+        "liquid": {"value_base": liquid, "pct_of_portfolio": liquid / total * 100},
+    }
+
+
+def risk_analyst_node(state: ResearchState) -> RiskState:
+    holdings = state["holdings"]
+    return {
+        "concentration": _concentration(holdings),
+        "category_overlap": _category_overlap(holdings),
+        "currency_exposure": _currency_exposure(holdings),
+        "liquidity": _liquidity_split(holdings),
+    }
