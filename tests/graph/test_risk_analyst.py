@@ -103,3 +103,31 @@ def test_liquidity_split_separates_real_estate():
     assert result["illiquid"]["pct_of_portfolio"] == pytest.approx(40.0)
     assert result["liquid"]["value_base"] == pytest.approx(60000.0)
     assert result["liquid"]["pct_of_portfolio"] == pytest.approx(60.0)
+
+
+def test_risk_analyst_node_returns_all_four_risk_views():
+    from agentic_frameworks.graph.nodes.risk_analyst import risk_analyst_node
+
+    state = {"holdings": HOLDINGS, "allocation": {}, "holdings_by_bucket": {}}
+    result = risk_analyst_node(state)
+
+    assert set(result.keys()) == {
+        "concentration",
+        "category_overlap",
+        "currency_exposure",
+        "liquidity",
+    }
+    assert result["currency_exposure"]["USD"]["pct_of_portfolio"] == pytest.approx(10.0)
+    assert result["liquidity"]["illiquid"]["pct_of_portfolio"] == pytest.approx(40.0)
+    assert set(result["category_overlap"]["by_sector"].keys()) == {"Small Cap"}
+
+
+def test_risk_analyst_node_fails_loud_on_holding_missing_sector():
+    from agentic_frameworks.graph.nodes.risk_analyst import risk_analyst_node
+
+    broken_holdings = [dict(h) for h in HOLDINGS]
+    del broken_holdings[0]["sector"]
+    state = {"holdings": broken_holdings, "allocation": {}, "holdings_by_bucket": {}}
+
+    with pytest.raises(KeyError):
+        risk_analyst_node(state)

@@ -73,3 +73,13 @@ def _liquidity_split(holdings: list[dict]) -> dict:
         "illiquid": {"value_base": illiquid, "pct_of_portfolio": illiquid / total * 100},
         "liquid": {"value_base": liquid, "pct_of_portfolio": liquid / total * 100},
     }
+
+
+def risk_analyst_node(state: dict) -> dict:
+    holdings = state["holdings"]
+    return {
+        "concentration": _concentration(holdings),
+        "category_overlap": _category_overlap(holdings),
+        "currency_exposure": _currency_exposure(holdings),
+        "liquidity": _liquidity_split(holdings),
+    }
