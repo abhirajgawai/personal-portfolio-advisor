@@ -6,3 +6,19 @@ from agentic_frameworks.graph.state import ResearchState
 def test_research_state_has_expected_keys():
     hints = get_type_hints(ResearchState)
     assert set(hints.keys()) == {"holdings", "allocation", "holdings_by_bucket"}
+
+
+def test_risk_state_has_expected_keys():
+    from agentic_frameworks.graph.state import RiskState
+
+    hints = get_type_hints(RiskState)
+    assert set(hints.keys()) == {
+        "concentration",
+        "category_overlap",
+        "currency_exposure",
+        "liquidity",
+    }
+    assert hints["concentration"] is dict
+    assert hints["category_overlap"] is dict
+    assert hints["currency_exposure"] is dict
+    assert hints["liquidity"] is dict
