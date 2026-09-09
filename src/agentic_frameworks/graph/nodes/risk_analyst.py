@@ -35,3 +35,14 @@ def _concentration(holdings: list[dict]) -> dict:
     ]
 
     return {"by_holding": by_holding, "by_asset_class": by_asset_class}
+
+
+def _category_overlap(holdings: list[dict]) -> dict:
+    by_sector: dict[str, list[dict]] = {}
+    for h in holdings:
+        by_sector.setdefault(h["sector"], []).append(
+            {"ticker": h["ticker"], "name": h["name"], "asset_class": h["asset_class"]}
+        )
+
+    overlapping = {sector: entries for sector, entries in by_sector.items() if len(entries) > 1}
+    return {"by_sector": overlapping}

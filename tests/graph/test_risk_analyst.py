@@ -67,3 +67,17 @@ def test_concentration_computes_correct_weights():
     assert by_asset_class["etf"] == pytest.approx(20.0)
     assert by_asset_class["equity"] == pytest.approx(20.0)
     assert by_asset_class["real_estate"] == pytest.approx(40.0)
+
+
+def test_category_overlap_includes_only_shared_sectors():
+    from agentic_frameworks.graph.nodes.risk_analyst import _category_overlap
+
+    result = _category_overlap(HOLDINGS)
+
+    assert set(result["by_sector"].keys()) == {"Small Cap"}
+
+    small_cap_tickers = {h["ticker"] for h in result["by_sector"]["Small Cap"]}
+    assert small_cap_tickers == {"INF846K01K35", "INF769K01LG4"}
+
+    small_cap_asset_classes = {h["asset_class"] for h in result["by_sector"]["Small Cap"]}
+    assert small_cap_asset_classes == {"mutual_fund", "etf"}
