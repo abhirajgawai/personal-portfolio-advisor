@@ -82,8 +82,14 @@ The Synthesizer's final output (and each specialist's candidate proposal) is a s
 *Teaches*: schema-first agent output, validation-before-use, why "just parse the LLM's JSON" is fragile compared to a typed contract.
 
 **4. MCP — Tool Layer**
-A new, separate, read-only MCP server (existing `portfolio_data_mcp/server.py` untouched) adding: news/filing/fundamentals lookup (US and India), a valuation/multiples tool (for the Conviction Gate's valuation check), and mutual fund category/factsheet lookup for the Fund Specialist. Built from scratch so you understand the protocol itself — tool schemas, request/response shape.
-*Teaches*: MCP as the vendor-neutral tool-calling standard; a tool built once, callable from the graph or any MCP-aware client.
+Decided 2026-09-09, after live-testing real candidate data sources against the actual portfolio's US holdings (IBM, GOOGL, VOO, SMH, IAU):
+- **US equity + ETF fundamentals/valuation:** [`narumiruna/yfinance-mcp`](https://github.com/narumiruna/yfinance-mcp), an existing, MIT-licensed, actively maintained MCP server wrapping the `yfinance` library — connected directly, not rebuilt. Live-verified: real fundamentals for equities (P/E, revenue, debt, margins) and real ETF holdings/sector-weighting data (the exact gap that ruled out Finnhub's free tier, which has no ETF endpoints at all). Free, no API key, broad US market coverage confirmed against tickers outside the current portfolio too.
+- **India mutual funds:** [MFapi.in](https://www.mfapi.in/), free, no API key, purpose-built for Indian mutual fund NAV/category/scheme data.
+- **India equity fundamentals/valuation:** still open — not yet researched/decided.
+- **Ruled out:** Massive.com (fundamentals gated behind a $199/month tier), Alpaca (no fundamentals data at all, and bundles live trade-execution tools — a direct conflict with this project's advisory-only guardrail, ruled out on safety grounds not just data fit).
+
+This is a deliberate deviation from the original "built from scratch" plan for this stack item — `narumiruna/yfinance-mcp` is used as-is, the same pattern already established with `portfolio_data_mcp`. The hands-on "build an MCP server yourself" learning goal is not lost — it still applies to any future new-write-capability server this project needs (e.g. if a genuinely custom data source shows up later), just not to this one, where reuse was faster, lower-risk, and already proven against real data.
+*Teaches*: MCP as the vendor-neutral tool-calling standard; connecting to and composing multiple independent MCP servers within one graph.
 
 **5. Temporal — Durable Daily Monitor**
 A Temporal workflow that runs daily, checks alert rules / daily performance data via the existing read-only MCP server, invokes the LangGraph advisor (or a scoped subgraph) to interpret anomalies, and notifies you — built so a crash or restart mid-run resumes cleanly rather than duplicating work or losing state.
