@@ -22,3 +22,18 @@ def test_risk_state_has_expected_keys():
     assert hints["category_overlap"] is dict
     assert hints["currency_exposure"] is dict
     assert hints["liquidity"] is dict
+
+
+def test_graph_state_has_expected_keys():
+    from agentic_frameworks.graph.state import GraphState
+
+    hints = get_type_hints(GraphState)
+    assert set(hints.keys()) == {
+        "holdings",
+        "allocation",
+        "holdings_by_bucket",
+        "concentration",
+        "category_overlap",
+        "currency_exposure",
+        "liquidity",
+    }
