@@ -15,9 +15,12 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+load_dotenv()
 
 SPECIALIST_MODEL_NAME = "deepseek/deepseek-v4.1-flash"
 BACKUP_MODEL_NAME = "z-ai/glm-5.3-flash"

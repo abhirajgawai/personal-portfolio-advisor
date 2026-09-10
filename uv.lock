@@ -12,6 +12,7 @@ dependencies = [
     { name = "langgraph-checkpoint-sqlite" },
     { name = "langgraph-cli" },
     { name = "pydantic-ai" },
+    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -27,6 +28,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.1.1" },
     { name = "langgraph-cli", specifier = ">=0.4.31" },
     { name = "pydantic-ai", specifier = ">=2.42.0" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
 ]
 
 [package.metadata.requires-dev]
