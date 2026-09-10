@@ -8,6 +8,7 @@ it must be launched as a subprocess speaking MCP over stdio.
 from __future__ import annotations
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from pydantic_ai.mcp import FastMCPClient, MCPToolset, StdioTransport
 
 PORTFOLIO_DATA_MCP_ROOT = r"E:\agentic-portfolio-dashboard"
 PORTFOLIO_DATA_MCP_PYTHON = r"E:\agentic-portfolio-dashboard\.venv\Scripts\python.exe"
@@ -31,3 +32,15 @@ def get_portfolio_data_client() -> MultiServerMCPClient:
         },
         handle_tool_errors=False,
     )
+
+
+def get_yfinance_toolset() -> MCPToolset:
+    """Build the MCPToolset for the yfinance-mcp server (US and India equity/ETF data).
+
+    Launched via `uvx yfmcp@latest` - an external package, not a project
+    dependency, same pattern as portfolio_data_mcp being a sibling
+    subprocess rather than an import.
+    """
+    transport = StdioTransport(command="uvx", args=["yfmcp@latest"])
+    client = FastMCPClient(transport)
+    return MCPToolset(client)
