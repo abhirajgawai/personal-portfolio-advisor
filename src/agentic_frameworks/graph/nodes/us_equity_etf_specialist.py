@@ -14,7 +14,7 @@ import json
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
-from agentic_frameworks.graph.schemas import ProposedCandidate
+from agentic_frameworks.graph.schemas import CandidateEvaluation, ProposedCandidate
 
 
 async def _verify_ticker(symbol: str, toolset: MCPToolset) -> bool:
@@ -80,3 +80,39 @@ def _apply_candidate_cap(candidates: list[ProposedCandidate]) -> list[ProposedCa
             capped.append(candidate)
             per_sector_counts[candidate.sector] += 1
     return capped[:MAX_CANDIDATES_TOTAL]
+
+
+_CONVICTION_GATE_SYSTEM_PROMPT = """You are evaluating one US equity/ETF new-buy candidate for a \
+personal, long-term portfolio advisor, using the New-Buy Conviction \
+Gate. Run these four checks in order, stopping at the first failure:
+
+1. Portfolio-fit: does this candidate address a real, identified gap \
+in the user's current holdings?
+2. Fundamentals: use your tools to check real financials (revenue, \
+earnings, debt, margins) - not assumptions.
+3. Valuation: is it reasonably priced now versus its own history and \
+peers? Richly-valued candidates should be flagged or rejected, not \
+rationalized.
+4. Style-fit: is it consistent with a long-term, buy-and-hold \
+investing approach - no day-trading or speculative framing.
+
+Avoid is the default, not buy: if any check fails, the action should \
+reflect that (e.g. Hold or Reduce, not Buy), with the specific reason \
+in risk_flags. This is advisory only - your output is never a trade \
+instruction, only a recommendation for the user to act on manually."""
+
+
+def _build_conviction_gate_evaluator(model, toolset: MCPToolset) -> Agent:
+    """Build the Conviction Gate evaluator Agent.
+
+    toolsets=[toolset] gives this agent real fundamentals/valuation
+    data access via yfinance-mcp for the fundamentals/valuation checks.
+    retries=2: bounded per CLAUDE.md's LLM cost control rule 6.
+    """
+    return Agent(
+        model,
+        output_type=CandidateEvaluation,
+        system_prompt=_CONVICTION_GATE_SYSTEM_PROMPT,
+        toolsets=[toolset],
+        retries=2,
+    )

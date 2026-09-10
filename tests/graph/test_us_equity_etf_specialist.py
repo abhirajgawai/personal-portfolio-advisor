@@ -57,3 +57,20 @@ async def test_candidate_generator_produces_proposed_candidates():
 
     assert isinstance(result.output, list)
     assert all(hasattr(c, "ticker") and hasattr(c, "sector") for c in result.output)
+
+
+async def test_conviction_gate_evaluator_produces_candidate_evaluation():
+    from pydantic_ai.models.test import TestModel
+
+    from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
+    from agentic_frameworks.graph.nodes.us_equity_etf_specialist import (
+        _build_conviction_gate_evaluator,
+    )
+
+    toolset = get_yfinance_toolset()
+    async with toolset:
+        evaluator = _build_conviction_gate_evaluator(TestModel(), toolset)
+        result = await evaluator.run("Evaluate ticker: XOM, gap sector: Energy")
+
+        assert result.output.action in {"Buy", "Hold", "Sell", "Reduce"}
+        assert isinstance(result.output.confidence, float)
