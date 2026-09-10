@@ -39,3 +39,22 @@ class RiskState(TypedDict):
     category_overlap: dict
     currency_exposure: dict
     liquidity: dict
+
+
+class GraphState(TypedDict):
+    """Combined state for the compiled graph - union of every node's output.
+
+    Includes every field ResearchState and RiskState define individually.
+    Those two schemas remain each node's own documented partial
+    contribution and what their own tests assert against; this is what
+    the compiled StateGraph itself uses as its state_schema, since
+    StateGraph takes exactly one schema, not one per node.
+    """
+
+    holdings: list[dict]
+    allocation: dict
+    holdings_by_bucket: dict[str, dict[str, list[dict]]]
+    concentration: dict
+    category_overlap: dict
+    currency_exposure: dict
+    liquidity: dict
