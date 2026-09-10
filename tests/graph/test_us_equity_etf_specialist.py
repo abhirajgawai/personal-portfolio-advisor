@@ -93,5 +93,6 @@ async def test_us_equity_etf_specialist_node_returns_candidate_evaluations():
 
     assert "us_equity_etf_candidates" in result
     assert isinstance(result["us_equity_etf_candidates"], list)
+    assert result["us_equity_etf_candidates"]
     for candidate in result["us_equity_etf_candidates"]:
         assert candidate["action"] in {"Buy", "Hold", "Sell", "Reduce"}
