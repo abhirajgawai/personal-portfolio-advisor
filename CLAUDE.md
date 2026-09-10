@@ -41,6 +41,18 @@ Standing design principles for every node/agent in this graph, established 2026-
 
 (Incremental, real-data, one-piece-at-a-time building is already covered by "Phased development" above — that rule exists *because of* this list, not separately from it.)
 
+## LLM cost control (every LLM-calling node)
+
+Standing rules for any node that calls an LLM (specialists, Synthesizer, future agents) — established 2026-09-10 during the US Equity/ETF Specialist design, so this isn't relearned per node.
+
+1. **Model choice is a decision Abhi makes per node, never a silent default.** Pick the cheapest model that reliably does the job — surface the tradeoff (cost vs. reasoning depth) and get an explicit choice before building against a model.
+2. **Reject-early before expensive calls.** Cheap, deterministic checks (e.g. portfolio-fit) run before any LLM evaluation or paid data-tool call — a candidate that fails early never reaches the expensive path.
+3. **Use prompt caching for stable system prompts.** Any system prompt/rules block that doesn't change across calls within a run (e.g. Conviction Gate rules) is written to be cacheable, not regenerated or re-sent fresh each time.
+4. **Minimal context per call.** Pass only what a call actually needs — never a full state/portfolio dump when a narrower slice will do.
+5. **Hard caps on generation, not soft guidance.** Anything that could produce an unbounded number of downstream LLM/tool calls (e.g. "propose candidates") gets an explicit numeric cap, enforced in code, never left to model judgment.
+6. **Bounded retries on structured-output validation.** `pydantic-ai`'s auto-retry-on-schema-mismatch needs an explicit max retry count set per call — never left at an unexamined default.
+7. **Long-term memory (LangGraph Store) is a cost control, not just state.** Rejected candidates, cached profiles, etc. get remembered across runs specifically so the same expensive research/evaluation never happens twice without new information.
+
 ## What this project is
 
 A personal, long-term portfolio advisor built as a LangGraph agent graph, working off a **real** SQLite portfolio database (`E:\agentic-portfolio-dashboard\data\portfolio.db`, ₹10.29M, mixed IN/US, mixed equity/fund/real-estate). Advisory only — it never places trades. This is also a hands-on learning project for LangGraph, LangGraph Studio, LangSmith, Pydantic AI, MCP, and Temporal — depth over breadth, one real system, not toy demos.
