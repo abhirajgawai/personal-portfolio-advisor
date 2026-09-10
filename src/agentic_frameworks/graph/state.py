@@ -41,6 +41,16 @@ class RiskState(TypedDict):
     liquidity: dict
 
 
+class SpecialistState(TypedDict):
+    """State the US Equity/ETF Specialist node produces.
+
+    us_equity_etf_candidates: the specialist's evaluated candidates,
+        each a `CandidateEvaluation` dict.
+    """
+
+    us_equity_etf_candidates: list[dict]
+
+
 class GraphState(TypedDict):
     """Combined state for the compiled graph - union of every node's output.
 

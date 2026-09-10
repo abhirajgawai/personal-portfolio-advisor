@@ -10,12 +10,25 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+US_GAP_SECTORS = [
+    "Health Care",
+    "Financials",
+    "Energy",
+    "Industrials",
+    "Consumer Discretionary",
+    "Consumer Staples",
+    "Real Estate",
+    "Utilities",
+    "Communication Services",
+    "Materials",
+]
+
 
 class ProposedCandidate(BaseModel):
     """One ticker the candidate generator proposes for a specific gap sector."""
 
     ticker: str
-    sector: str
+    sector: Literal[*US_GAP_SECTORS]
 
 
 class CandidateEvaluation(BaseModel):

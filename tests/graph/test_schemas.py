@@ -57,3 +57,10 @@ def test_proposed_candidate_requires_ticker_and_sector():
 
     assert candidate.ticker == "XOM"
     assert candidate.sector == "Energy"
+
+
+def test_proposed_candidate_rejects_unknown_sector():
+    from agentic_frameworks.graph.schemas import ProposedCandidate
+
+    with pytest.raises(ValidationError):
+        ProposedCandidate(ticker="XOM", sector="Not A Real Sector")

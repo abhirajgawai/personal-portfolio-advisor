@@ -12,36 +12,38 @@ from __future__ import annotations
 import json
 
 from pydantic_ai import Agent
-from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.toolsets.filtered import FilteredToolset
 
-from agentic_frameworks.graph.schemas import CandidateEvaluation, ProposedCandidate
+from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
+from agentic_frameworks.graph.models import get_specialist_model
+from agentic_frameworks.graph.schemas import (
+    US_GAP_SECTORS,
+    CandidateEvaluation,
+    ProposedCandidate,
+)
+from agentic_frameworks.graph.state import RiskState, SpecialistState
 
 
-async def _verify_ticker(symbol: str, toolset: MCPToolset) -> bool:
+async def _verify_ticker(symbol: str, toolset: FilteredToolset) -> bool:
     """Confirm `symbol` resolves to a real, current instrument via yfinance-mcp.
 
     A nonexistent/delisted ticker doesn't raise - yfinance-mcp returns a
     near-empty payload instead (confirmed live: {"trailingPegRatio": null}
     for a fake symbol). `longName` being present is the reliable signal
     a real instrument was found.
+
+    `direct_call_tool` is an MCPToolset-only method (not present on the
+    FilteredToolset wrapper `get_yfinance_toolset` now returns), so this
+    calls it on `toolset.wrapped` - the underlying MCPToolset. This is a
+    direct, out-of-band verification call, not a tool the LLM invokes
+    through its registered toolset, so bypassing the exclusion filter
+    here is correct: `yfinance_get_ticker_info` isn't one of the excluded
+    tools anyway.
     """
-    result = await toolset.direct_call_tool("yfinance_get_ticker_info", {"symbol": symbol})
+    result = await toolset.wrapped.direct_call_tool("yfinance_get_ticker_info", {"symbol": symbol})
     data = json.loads(result)
     return data.get("longName") is not None
 
-
-US_GAP_SECTORS = [
-    "Health Care",
-    "Financials",
-    "Energy",
-    "Industrials",
-    "Consumer Discretionary",
-    "Consumer Staples",
-    "Real Estate",
-    "Utilities",
-    "Communication Services",
-    "Materials",
-]
 
 MAX_CANDIDATES_PER_SECTOR = 3
 MAX_CANDIDATES_TOTAL = 5
@@ -102,7 +104,7 @@ in risk_flags. This is advisory only - your output is never a trade \
 instruction, only a recommendation for the user to act on manually."""
 
 
-def _build_conviction_gate_evaluator(model, toolset: MCPToolset) -> Agent:
+def _build_conviction_gate_evaluator(model, toolset: FilteredToolset) -> Agent:
     """Build the Conviction Gate evaluator Agent.
 
     toolsets=[toolset] gives this agent real fundamentals/valuation
@@ -118,12 +120,13 @@ def _build_conviction_gate_evaluator(model, toolset: MCPToolset) -> Agent:
     )
 
 
-from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
-from agentic_frameworks.graph.models import get_specialist_model
-
-
-async def us_equity_etf_specialist_node(state: dict) -> dict:
+async def us_equity_etf_specialist_node(state: RiskState) -> SpecialistState:
     """Propose, verify, and evaluate US equity/ETF new-buy candidates.
+
+    `state` (RiskState) is intentionally unused today - this node only
+    needs the gap-sector list, not the Risk Analyst's output yet. The
+    annotation documents the real contract for when this node is wired
+    into the graph after the Risk Analyst node.
 
     Fails loud: any LLM/tool/verification error propagates uncaught.
     Cost control: reject-early (ticker verification before the Conviction
