@@ -23,6 +23,24 @@ This is a learning project first, a working system second. The user (Abhi) wants
 - Planning the next phase does not start until the current phase's tests pass. No "we'll test it later" or parallel phase-planning-while-untested.
 - Once a phase's tests pass and its branch is merged to `main`, push `main` to GitHub before starting the next phase's brainstorming. Commits and pushes happen per phase, not batched across multiple phases and not held back for a later "big push."
 
+## Agentic workflow design principles
+
+Standing design principles for every node/agent in this graph, established 2026-09-10 after building the Research and Risk Analyst nodes. Apply going forward; existing code is already compliant (see audit).
+
+1. **Workflows before agents.** Default to a fixed, deterministic pipeline (a plain function per node). Reach for genuine LLM-driven autonomy only where a fixed pipeline can't do the job (specialist judgment) — not for data-fetching or measurement.
+2. **Small, single-purpose, independently testable units.** One node = one job. Split internal logic into small private helpers when a node does more than one distinct computation.
+3. **Explicit, typed state between nodes.** Every node's input/output is a `TypedDict` in `state.py` — never an opaque blob or free-form dict passed by convention.
+4. **Separate "gather/measure" from "judge/decide."** Data-fetching/measurement nodes report raw numbers only — no verdicts, no thresholds. Judgment concentrates in later nodes (Conviction Gate, Synthesizer), so that's the only place needing scrutiny for *opinion*, not fact.
+5. **Fail loud, never fabricate.** No `try`/`except` swallowing errors. No placeholder/fabricated data anywhere, including test fixtures (real tickers/sectors/values only). A crashed node beats a silently-wrong one.
+6. **Tools as external, reusable protocols (MCP) — never ad-hoc logic baked into a node.** A node calls a tool; it never embeds the data-fetching logic itself.
+7. **Guardrails are structural, not instructional.** Enforce constraints by never building/registering the capability that would violate them — not by prompting an LLM to avoid it. This is why the "advisory only" guardrail above means an MCP server bundling execution capability is ruled out entirely, never "used carefully."
+8. **Bounded autonomy via reject-early gates.** Expensive work only runs on candidates that already cleared a cheap check first (Conviction Gate's portfolio-fit check gates fundamentals/valuation).
+9. **Human-in-the-loop at consequential decision points.** Any sell or new-buy suggestion routes through human approval before finalizing.
+10. **Memory is a deliberate architectural choice.** Short-term/thread memory and long-term/cross-run memory (see Harness & Memory below) are different concerns — never conflated into one undifferentiated "memory" blob.
+11. **Observability is not optional tooling.** Every node/run must be inspectable after the fact (LangGraph Studio / LangSmith) — not just trusted to have worked.
+
+(Incremental, real-data, one-piece-at-a-time building is already covered by "Phased development" above — that rule exists *because of* this list, not separately from it.)
+
 ## What this project is
 
 A personal, long-term portfolio advisor built as a LangGraph agent graph, working off a **real** SQLite portfolio database (`E:\agentic-portfolio-dashboard\data\portfolio.db`, ₹10.29M, mixed IN/US, mixed equity/fund/real-estate). Advisory only — it never places trades. This is also a hands-on learning project for LangGraph, LangGraph Studio, LangSmith, Pydantic AI, MCP, and Temporal — depth over breadth, one real system, not toy demos.
