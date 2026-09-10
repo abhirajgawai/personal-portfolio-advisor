@@ -75,7 +75,7 @@ Real portfolio composition — not a single-market, single-asset-type portfolio:
 ## Harness & memory
 
 - No separate agent harness — LangGraph's own runtime executes the graph.
-- Short-term/thread memory: LangGraph `SqliteSaver` checkpointer, pointed at `agent_memory.db`.
+- Short-term/thread memory: LangGraph `AsyncSqliteSaver` checkpointer, pointed at `agent_memory.db` (async, not the sync `SqliteSaver` — the graph's nodes are async and run via `ainvoke`; corrected 2026-09-10 during the Graph Harness phase).
 - Long-term/cross-run memory: LangGraph Store API, same database — rejected candidates, cached style profile.
 - No third-party memory platform (Hindsight/Flue etc.) — LangGraph's native mechanisms already cover this project's memory needs. Don't introduce one without an explicit decision to revisit this.
 

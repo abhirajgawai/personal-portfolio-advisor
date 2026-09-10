@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
+from uuid import uuid4
 
 
 def test_build_graph_wires_research_and_risk_analyst():
@@ -19,7 +19,8 @@ async def test_graph_runs_end_to_end_with_real_data_and_persists_checkpoint():
 
     async with get_checkpointer() as checkpointer:
         compiled = build_graph().compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "test-graph-harness-e2e"}}
+        thread_id = f"test-graph-harness-e2e-{uuid4()}"
+        config = {"configurable": {"thread_id": thread_id}}
 
         result = await compiled.ainvoke({}, config=config)
 
@@ -39,4 +40,4 @@ async def test_graph_runs_end_to_end_with_real_data_and_persists_checkpoint():
 
         state_snapshot = await compiled.aget_state(config)
         assert state_snapshot.values
-        assert state_snapshot.config["configurable"]["thread_id"] == "test-graph-harness-e2e"
+        assert state_snapshot.config["configurable"]["thread_id"] == thread_id
