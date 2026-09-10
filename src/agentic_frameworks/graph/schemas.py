@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProposedCandidate(BaseModel):
@@ -22,7 +22,7 @@ class CandidateEvaluation(BaseModel):
     """A new-buy specialist's verdict on one candidate, after the Conviction Gate."""
 
     action: Literal["Buy", "Hold", "Sell", "Reduce"]
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
     risk_flags: list[str]
     entry_approach: Literal["LumpSum", "Staggered"] | None

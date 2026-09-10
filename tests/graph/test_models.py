@@ -10,5 +10,7 @@ def test_get_specialist_model_uses_configured_model_name(monkeypatch):
 
     model = models.get_specialist_model()
 
-    assert model.model_name == models.SPECIALIST_MODEL_NAME
     assert models.SPECIALIST_MODEL_NAME == "deepseek/deepseek-v4.1-flash"
+    assert models.BACKUP_MODEL_NAME == "z-ai/glm-5.3-flash"
+    wrapped_model_names = [m.model_name for m in model.models]
+    assert wrapped_model_names == [models.SPECIALIST_MODEL_NAME, models.BACKUP_MODEL_NAME]

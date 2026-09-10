@@ -36,6 +36,20 @@ def test_candidate_evaluation_rejects_invalid_action():
         )
 
 
+def test_candidate_evaluation_rejects_out_of_range_confidence():
+    from agentic_frameworks.graph.schemas import CandidateEvaluation
+
+    with pytest.raises(ValidationError):
+        CandidateEvaluation(
+            action="Buy",
+            confidence=7.0,
+            reasoning="confidence should be a 0-1 probability, not 7.0",
+            risk_flags=[],
+            entry_approach=None,
+            suggested_platform=None,
+        )
+
+
 def test_proposed_candidate_requires_ticker_and_sector():
     from agentic_frameworks.graph.schemas import ProposedCandidate
 
