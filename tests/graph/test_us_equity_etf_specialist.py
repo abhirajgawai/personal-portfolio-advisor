@@ -74,3 +74,24 @@ async def test_conviction_gate_evaluator_produces_candidate_evaluation():
 
         assert result.output.action in {"Buy", "Hold", "Sell", "Reduce"}
         assert isinstance(result.output.confidence, float)
+
+
+async def test_us_equity_etf_specialist_node_returns_candidate_evaluations():
+    from pydantic_ai.models.test import TestModel
+
+    from agentic_frameworks.graph.nodes import us_equity_etf_specialist as specialist_module
+
+    def fake_get_specialist_model():
+        return TestModel()
+
+    original = specialist_module.get_specialist_model
+    specialist_module.get_specialist_model = fake_get_specialist_model
+    try:
+        result = await specialist_module.us_equity_etf_specialist_node({})
+    finally:
+        specialist_module.get_specialist_model = original
+
+    assert "us_equity_etf_candidates" in result
+    assert isinstance(result["us_equity_etf_candidates"], list)
+    for candidate in result["us_equity_etf_candidates"]:
+        assert candidate["action"] in {"Buy", "Hold", "Sell", "Reduce"}

@@ -116,3 +116,43 @@ def _build_conviction_gate_evaluator(model, toolset: MCPToolset) -> Agent:
         toolsets=[toolset],
         retries=2,
     )
+
+
+from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
+from agentic_frameworks.graph.models import get_specialist_model
+
+
+async def us_equity_etf_specialist_node(state: dict) -> dict:
+    """Propose, verify, and evaluate US equity/ETF new-buy candidates.
+
+    Fails loud: any LLM/tool/verification error propagates uncaught.
+    Cost control: reject-early (ticker verification before the Conviction
+    Gate evaluator ever runs), hard caps enforced in code, minimal
+    per-candidate context, bounded retries on both agents.
+    """
+    model = get_specialist_model()
+    toolset = get_yfinance_toolset()
+
+    async with toolset:
+        generator = _build_candidate_generator(model)
+        gap_sectors_text = ", ".join(US_GAP_SECTORS)
+        generation_result = await generator.run(
+            f"Propose candidates for these gap sectors: {gap_sectors_text}"
+        )
+        capped_candidates = _apply_candidate_cap(generation_result.output)
+
+        verified_candidates = [
+            candidate
+            for candidate in capped_candidates
+            if await _verify_ticker(candidate.ticker, toolset)
+        ]
+
+        evaluator = _build_conviction_gate_evaluator(model, toolset)
+        evaluations = []
+        for candidate in verified_candidates:
+            eval_result = await evaluator.run(
+                f"Evaluate ticker: {candidate.ticker}, gap sector: {candidate.sector}"
+            )
+            evaluations.append(eval_result.output.model_dump())
+
+    return {"us_equity_etf_candidates": evaluations}
