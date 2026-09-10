@@ -41,6 +41,16 @@ class RiskState(TypedDict):
     liquidity: dict
 
 
+class SpecialistState(TypedDict):
+    """State the US Equity/ETF Specialist node produces.
+
+    us_equity_etf_candidates: the specialist's evaluated candidates,
+        each a `CandidateEvaluation` dict.
+    """
+
+    us_equity_etf_candidates: list[dict]
+
+
 class GraphState(TypedDict):
     """Combined state for the compiled graph - union of every node's output.
 
@@ -49,6 +59,18 @@ class GraphState(TypedDict):
     contribution and what their own tests assert against; this is what
     the compiled StateGraph itself uses as its state_schema, since
     StateGraph takes exactly one schema, not one per node.
+
+    Fields:
+    holdings: the raw `latest_snapshot` rows from Research node.
+    allocation: the raw `allocation_summary` output from Research node.
+    holdings_by_bucket: `holdings` regrouped as
+        {asset_class: {geography: [holding, ...]}}.
+    concentration: concentration risk measurements from Risk Analyst node.
+    category_overlap: category overlap risk measurements from Risk Analyst node.
+    currency_exposure: currency exposure risk measurements from Risk Analyst node.
+    liquidity: liquidity risk measurements from Risk Analyst node.
+    us_equity_etf_candidates: the US Equity/ETF Specialist's evaluated candidates,
+        each a `CandidateEvaluation` dict.
     """
 
     holdings: list[dict]
@@ -58,3 +80,4 @@ class GraphState(TypedDict):
     category_overlap: dict
     currency_exposure: dict
     liquidity: dict
+    us_equity_etf_candidates: list[dict]

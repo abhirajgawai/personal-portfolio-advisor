@@ -24,6 +24,14 @@ def test_risk_state_has_expected_keys():
     assert hints["liquidity"] is dict
 
 
+def test_specialist_state_has_expected_keys():
+    from agentic_frameworks.graph.state import SpecialistState
+
+    hints = get_type_hints(SpecialistState)
+    assert set(hints.keys()) == {"us_equity_etf_candidates"}
+    assert hints["us_equity_etf_candidates"] == list[dict]
+
+
 def test_graph_state_has_expected_keys():
     from agentic_frameworks.graph.state import GraphState
 
@@ -36,4 +44,13 @@ def test_graph_state_has_expected_keys():
         "category_overlap",
         "currency_exposure",
         "liquidity",
+        "us_equity_etf_candidates",
     }
+
+
+def test_graph_state_includes_us_equity_etf_candidates():
+    from agentic_frameworks.graph.state import GraphState
+
+    hints = get_type_hints(GraphState)
+    assert "us_equity_etf_candidates" in hints
+    assert hints["us_equity_etf_candidates"] == list[dict]
