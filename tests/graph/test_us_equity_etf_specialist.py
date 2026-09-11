@@ -160,3 +160,25 @@ async def test_us_equity_etf_specialist_node_returns_candidate_evaluations():
     assert result["us_equity_etf_candidates"]
     for candidate in result["us_equity_etf_candidates"]:
         assert candidate["action"] in {"Buy", "Hold", "Sell", "Reduce"}
+
+
+async def test_us_equity_etf_specialist_node_returns_empty_list_when_no_gaps_and_skips_model_setup():
+    from agentic_frameworks.graph.nodes import us_equity_etf_specialist as specialist_module
+
+    def compute_no_gaps(holdings_by_bucket):
+        return []
+
+    def fail_if_called():
+        raise AssertionError("get_specialist_model should not be called when there are no gaps")
+
+    original_compute = specialist_module._compute_us_gaps
+    original_model_getter = specialist_module.get_specialist_model
+    specialist_module._compute_us_gaps = compute_no_gaps
+    specialist_module.get_specialist_model = fail_if_called
+    try:
+        result = await specialist_module.us_equity_etf_specialist_node({"holdings_by_bucket": {}})
+    finally:
+        specialist_module._compute_us_gaps = original_compute
+        specialist_module.get_specialist_model = original_model_getter
+
+    assert result == {"us_equity_etf_candidates": []}

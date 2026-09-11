@@ -57,7 +57,14 @@ async def test_graph_runs_end_to_end_with_real_data_and_persists_checkpoint():
             assert result["currency_exposure"]
             assert result["liquidity"]["illiquid"]["value_base"] > 0
             assert result["us_equity_etf_candidates"]
-            assert result["india_equity_candidates"]
+            # TestModel deterministically emits sector="Health Care" (the
+            # first Literal choice) regardless of prompt content. "Health
+            # Care" is a real gap for the US specialist's real holdings but
+            # not for India's (real India gaps are Energy/Real Estate), so
+            # the (correct, intentional) gap-filter added to fix the
+            # off-gap-candidate finding drops it here - an empty list is
+            # the right outcome, not a regression.
+            assert result["india_equity_candidates"] == []
 
             state_snapshot = await compiled.aget_state(config)
             assert state_snapshot.values

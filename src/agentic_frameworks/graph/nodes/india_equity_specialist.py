@@ -14,7 +14,10 @@ from pydantic_ai.toolsets.filtered import FilteredToolset
 
 from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
 from agentic_frameworks.graph.models import get_specialist_model
-from agentic_frameworks.graph.nodes._specialist_helpers import _apply_candidate_cap
+from agentic_frameworks.graph.nodes._specialist_helpers import (
+    _apply_candidate_cap,
+    _filter_to_gap_sectors,
+)
 from agentic_frameworks.graph.nodes.us_equity_etf_specialist import _verify_ticker
 from agentic_frameworks.graph.schemas import CandidateEvaluation, GICS_SECTORS, ProposedCandidate
 from agentic_frameworks.graph.state import GraphState, SpecialistState
@@ -148,20 +151,28 @@ async def india_equity_specialist_node(state: GraphState) -> SpecialistState:
     Same three-stage pipeline as us_equity_etf_specialist_node, with
     gap sectors computed live from real holdings_by_bucket rather than
     a static file/hardcoded list. Fails loud: any LLM/tool/verification
-    error propagates uncaught.
+    error propagates uncaught. Reject-early on no gap sectors (skips
+    model/toolset setup entirely when every GICS sector is already
+    covered) and on off-gap candidates (ticker verification and the
+    Conviction Gate evaluator both run only on candidates that address
+    a real gap).
     """
+    gap_sectors = _compute_india_equity_gaps(state["holdings_by_bucket"])
+    if not gap_sectors:
+        return {"india_equity_candidates": []}
+
     model = get_specialist_model()
     toolset = get_yfinance_toolset()
     holdings_summary = _summarize_india_equity_holdings(state["holdings_by_bucket"])
 
     async with toolset:
         generator = _build_candidate_generator(model)
-        gap_sectors = _compute_india_equity_gaps(state["holdings_by_bucket"])
         gap_sectors_text = ", ".join(gap_sectors)
         generation_result = await generator.run(
             f"Propose candidates for these gap sectors: {gap_sectors_text}"
         )
-        capped_candidates = _apply_candidate_cap(generation_result.output)
+        on_gap_candidates = _filter_to_gap_sectors(generation_result.output, gap_sectors)
+        capped_candidates = _apply_candidate_cap(on_gap_candidates)
 
         verified_candidates = [
             candidate

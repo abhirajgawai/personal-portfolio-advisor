@@ -23,3 +23,16 @@ def _apply_candidate_cap(candidates: list[ProposedCandidate]) -> list[ProposedCa
             capped.append(candidate)
             per_sector_counts[candidate.sector] += 1
     return capped[:MAX_CANDIDATES_TOTAL]
+
+
+def _filter_to_gap_sectors(candidates: list[ProposedCandidate], gap_sectors: list[str]) -> list[ProposedCandidate]:
+    """Drop any candidate whose sector isn't one of this run's live-computed gaps.
+
+    Necessary because ProposedCandidate.sector validates against the full
+    GICS_SECTORS taxonomy (see schemas.py), not just this run's actual gaps
+    - a model can legally propose a candidate for a sector the portfolio
+    already covers. That candidate must never reach a real ticker-
+    verification or Conviction Gate call.
+    """
+    gap_set = set(gap_sectors)
+    return [candidate for candidate in candidates if candidate.sector in gap_set]
