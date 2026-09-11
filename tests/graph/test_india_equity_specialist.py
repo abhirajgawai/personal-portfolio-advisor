@@ -47,3 +47,31 @@ def test_compute_india_equity_gaps_skips_null_sector_rows():
     gaps = _compute_india_equity_gaps(holdings_by_bucket)
 
     assert len(gaps) == 11
+
+
+def test_summarize_india_equity_holdings_lists_real_in_equity():
+    from agentic_frameworks.graph.nodes.india_equity_specialist import (
+        _summarize_india_equity_holdings,
+    )
+
+    holdings_by_bucket = {
+        "equity": {
+            "IN": [{"ticker": "TCS", "name": "Tata Consultancy Services", "sector": "Information Technology"}],
+            "US": [{"ticker": "GOOGL", "name": "Alphabet Inc", "sector": "Technology"}],
+        },
+    }
+
+    summary = _summarize_india_equity_holdings(holdings_by_bucket)
+
+    assert "TCS" in summary
+    assert "GOOGL" not in summary
+
+
+def test_summarize_india_equity_holdings_handles_no_in_holdings():
+    from agentic_frameworks.graph.nodes.india_equity_specialist import (
+        _summarize_india_equity_holdings,
+    )
+
+    summary = _summarize_india_equity_holdings({})
+
+    assert "no India equities" in summary

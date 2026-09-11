@@ -52,3 +52,18 @@ def _compute_india_equity_gaps(holdings_by_bucket: dict[str, dict[str, list[dict
             continue
         covered.add(IN_SECTOR_TO_GICS[sector])
     return [bucket for bucket in GICS_SECTORS if bucket not in covered]
+
+
+def _summarize_india_equity_holdings(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> str:
+    """Build a real, current summary of IN equity holdings for the portfolio-fit check.
+
+    Built fresh from holdings_by_bucket on every node invocation - never
+    a hardcoded list - so it automatically reflects whatever the user
+    actually holds whenever this node runs.
+    """
+    lines = []
+    for holding in holdings_by_bucket.get("equity", {}).get("IN", []):
+        lines.append(f"- {holding['ticker']} ({holding['name']}), sector: {holding['sector']}")
+    if not lines:
+        return "The user currently holds no India equities."
+    return "The user's current India equity holdings are:\n" + "\n".join(lines)
