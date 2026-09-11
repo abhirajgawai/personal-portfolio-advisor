@@ -45,16 +45,19 @@ IN_SECTOR_TO_GICS = {
 
 
 def _compute_india_equity_gaps(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> list[str]:
-    """Live-compute GICS sectors with zero coverage in real IN equity holdings.
+    """Live-compute GICS sectors with zero coverage in the real portfolio.
 
-    IN equity only - mutual funds and real estate are excluded (fund
-    `sector` values are fund category, not GICS sector, and real
-    estate isn't sector-tagged at all; including either would mean
-    fabricating coverage that isn't actually known). Rows with
-    sector=None are skipped (the two MANUAL_TOTAL platform-total rows,
-    a known data-quality case, not a real gap). Any other sector
-    string not in IN_SECTOR_TO_GICS raises - fail loud rather than
-    silently miscounting.
+    Rolls up IN equity holdings by sector (as before). Additionally
+    treats "Real Estate" as covered if the user holds any IN real
+    estate (holdings_by_bucket["real_estate"]["IN"]) - this is a
+    directly known fact from the data, unlike mutual fund `sector`
+    values (fund category, not GICS sector) which stay excluded
+    because including them would mean fabricating coverage that isn't
+    actually known. Rows with sector=None are skipped (the two
+    MANUAL_TOTAL platform-total rows, a known data-quality case, not a
+    real gap). Any other equity sector string not in
+    IN_SECTOR_TO_GICS raises - fail loud rather than silently
+    miscounting.
     """
     covered: set[str] = set()
     for holding in holdings_by_bucket.get("equity", {}).get("IN", []):
@@ -62,6 +65,8 @@ def _compute_india_equity_gaps(holdings_by_bucket: dict[str, dict[str, list[dict
         if sector is None:
             continue
         covered.add(IN_SECTOR_TO_GICS[sector])
+    if holdings_by_bucket.get("real_estate", {}).get("IN", []):
+        covered.add("Real Estate")
     return [bucket for bucket in GICS_SECTORS if bucket not in covered]
 
 

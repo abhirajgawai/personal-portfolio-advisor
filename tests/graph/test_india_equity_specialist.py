@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-async def test_compute_india_equity_gaps_finds_energy_and_real_estate_given_real_holdings():
+async def test_compute_india_equity_gaps_finds_only_energy_given_real_holdings_and_real_estate_ownership():
     from agentic_frameworks.graph.nodes.india_equity_specialist import (
         _compute_india_equity_gaps,
     )
@@ -13,7 +13,7 @@ async def test_compute_india_equity_gaps_finds_energy_and_real_estate_given_real
 
     gaps = _compute_india_equity_gaps(research_result["holdings_by_bucket"])
 
-    assert set(gaps) == {"Energy", "Real Estate"}
+    assert set(gaps) == {"Energy"}
 
 
 def test_compute_india_equity_gaps_raises_on_unmapped_sector():
@@ -47,6 +47,33 @@ def test_compute_india_equity_gaps_skips_null_sector_rows():
     gaps = _compute_india_equity_gaps(holdings_by_bucket)
 
     assert len(gaps) == 11
+
+
+def test_compute_india_equity_gaps_treats_real_estate_holding_as_covered():
+    from agentic_frameworks.graph.nodes.india_equity_specialist import (
+        _compute_india_equity_gaps,
+    )
+
+    holdings_by_bucket = {
+        "equity": {"IN": []},
+        "real_estate": {"IN": [{"ticker": "PROPERTY", "name": "Residential Property", "sector": "Residential"}]},
+    }
+
+    gaps = _compute_india_equity_gaps(holdings_by_bucket)
+
+    assert "Real Estate" not in gaps
+
+
+def test_compute_india_equity_gaps_still_flags_real_estate_when_no_real_estate_holding():
+    from agentic_frameworks.graph.nodes.india_equity_specialist import (
+        _compute_india_equity_gaps,
+    )
+
+    holdings_by_bucket = {"equity": {"IN": []}}
+
+    gaps = _compute_india_equity_gaps(holdings_by_bucket)
+
+    assert "Real Estate" in gaps
 
 
 def test_summarize_india_equity_holdings_lists_real_in_equity():
