@@ -25,6 +25,32 @@ from agentic_frameworks.graph.schemas import (
 from agentic_frameworks.graph.state import GraphState, SpecialistState
 
 
+US_SECTOR_TO_GICS = {
+    "Technology": "Information Technology",
+    "Semiconductors": "Information Technology",
+}
+
+
+def _compute_us_gaps(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> list[str]:
+    """Live-compute GICS sectors with zero coverage in real US equity holdings.
+
+    Equity only - US ETF `sector` values (e.g. "US Large Cap", "Gold")
+    are asset-classification labels, not real GICS sectors, and
+    including them would mean fabricating sector coverage that isn't
+    actually known. Rows with sector=None are skipped (manual-total
+    platform rows, a known data-quality case), not treated as
+    unmapped. Any other sector string not in US_SECTOR_TO_GICS raises -
+    fail loud rather than silently miscounting.
+    """
+    covered: set[str] = set()
+    for holding in holdings_by_bucket.get("equity", {}).get("US", []):
+        sector = holding["sector"]
+        if sector is None:
+            continue
+        covered.add(US_SECTOR_TO_GICS[sector])
+    return [bucket for bucket in GICS_SECTORS if bucket not in covered]
+
+
 async def _verify_ticker(symbol: str, toolset: FilteredToolset) -> bool:
     """Confirm `symbol` resolves to a real, current instrument via yfinance-mcp.
 
@@ -149,7 +175,8 @@ async def us_equity_etf_specialist_node(state: GraphState) -> SpecialistState:
 
     async with toolset:
         generator = _build_candidate_generator(model)
-        gap_sectors_text = ", ".join(GICS_SECTORS)
+        gap_sectors = _compute_us_gaps(state["holdings_by_bucket"])
+        gap_sectors_text = ", ".join(gap_sectors)
         generation_result = await generator.run(
             f"Propose candidates for these gap sectors: {gap_sectors_text}"
         )

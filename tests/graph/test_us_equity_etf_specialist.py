@@ -86,6 +86,49 @@ async def test_conviction_gate_evaluator_produces_candidate_evaluation():
         assert isinstance(result.output.confidence, float)
 
 
+async def test_compute_us_gaps_excludes_information_technology_given_real_holdings():
+    from agentic_frameworks.graph.nodes.research import research_node
+    from agentic_frameworks.graph.nodes.us_equity_etf_specialist import (
+        _compute_us_gaps,
+    )
+
+    research_result = await research_node({})
+
+    gaps = _compute_us_gaps(research_result["holdings_by_bucket"])
+
+    assert "Information Technology" not in gaps
+    assert "Energy" in gaps
+    assert "Health Care" in gaps
+    assert len(gaps) == 10
+
+
+def test_compute_us_gaps_raises_on_unmapped_sector():
+    from agentic_frameworks.graph.nodes.us_equity_etf_specialist import _compute_us_gaps
+
+    holdings_by_bucket = {
+        "equity": {
+            "US": [{"ticker": "ZZZ", "name": "Fictional Co", "sector": "Not A Real Sector"}],
+        }
+    }
+
+    with __import__("pytest").raises(KeyError):
+        _compute_us_gaps(holdings_by_bucket)
+
+
+def test_compute_us_gaps_skips_null_sector_rows():
+    from agentic_frameworks.graph.nodes.us_equity_etf_specialist import _compute_us_gaps
+
+    holdings_by_bucket = {
+        "equity": {
+            "US": [{"ticker": "MANUAL_TOTAL", "name": "Manual Total", "sector": None}],
+        }
+    }
+
+    gaps = _compute_us_gaps(holdings_by_bucket)
+
+    assert len(gaps) == 11
+
+
 async def test_us_equity_etf_specialist_node_returns_candidate_evaluations():
     from pydantic_ai.models.test import TestModel
 
