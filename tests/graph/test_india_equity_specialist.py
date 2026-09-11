@@ -75,3 +75,66 @@ def test_summarize_india_equity_holdings_handles_no_in_holdings():
     summary = _summarize_india_equity_holdings({})
 
     assert "no India equities" in summary
+
+
+async def test_india_candidate_generator_produces_proposed_candidates():
+    from pydantic_ai.models.test import TestModel
+
+    from agentic_frameworks.graph.nodes.india_equity_specialist import (
+        _build_candidate_generator,
+    )
+
+    generator = _build_candidate_generator(TestModel())
+    result = await generator.run("propose candidates for: Energy")
+
+    assert isinstance(result.output, list)
+    assert all(hasattr(c, "ticker") and hasattr(c, "sector") for c in result.output)
+
+
+async def test_india_conviction_gate_evaluator_produces_candidate_evaluation():
+    from pydantic_ai.models.test import TestModel
+
+    from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
+    from agentic_frameworks.graph.nodes.india_equity_specialist import (
+        _build_conviction_gate_evaluator,
+    )
+
+    toolset = get_yfinance_toolset()
+    async with toolset:
+        evaluator = _build_conviction_gate_evaluator(
+            TestModel(), toolset, "The user currently holds no India equities."
+        )
+        result = await evaluator.run("Evaluate ticker: RELIANCE.NS, gap sector: Energy")
+
+        assert result.output.action in {"Buy", "Hold", "Sell", "Reduce"}
+        assert isinstance(result.output.confidence, float)
+
+
+async def test_india_equity_specialist_node_returns_candidate_evaluations():
+    from pydantic_ai.models.test import TestModel
+
+    from agentic_frameworks.graph.nodes import india_equity_specialist as specialist_module
+
+    def fake_get_specialist_model():
+        return TestModel()
+
+    state = {
+        "holdings_by_bucket": {
+            "equity": {
+                "IN": [{"ticker": "TCS", "name": "Tata Consultancy Services", "sector": "Information Technology"}],
+            },
+        }
+    }
+
+    original = specialist_module.get_specialist_model
+    specialist_module.get_specialist_model = fake_get_specialist_model
+    try:
+        result = await specialist_module.india_equity_specialist_node(state)
+    finally:
+        specialist_module.get_specialist_model = original
+
+    assert "india_equity_candidates" in result
+    assert isinstance(result["india_equity_candidates"], list)
+    assert result["india_equity_candidates"]
+    for candidate in result["india_equity_candidates"]:
+        assert candidate["action"] in {"Buy", "Hold", "Sell", "Reduce"}
