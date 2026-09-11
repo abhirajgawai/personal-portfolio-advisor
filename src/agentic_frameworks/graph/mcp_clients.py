@@ -52,11 +52,18 @@ def get_yfinance_toolset() -> FilteredToolset:
     dependency, same pattern as portfolio_data_mcp being a sibling
     subprocess rather than an import.
 
-    tool_error_behavior="error" (rather than the library default of
-    "retry") so a real tool failure raises instead of being silently
-    retried/rationalized by the model - same fail-loud rationale as
-    `handle_tool_errors=False` on `get_portfolio_data_client` above:
-    Research fails loud, never on fabricated or partial data.
+    tool_error_behavior="retry" (the library default) so a malformed
+    tool call - e.g. the model omitting a required argument - raises
+    ModelRetry with the actual validation message, letting the model
+    self-correct within the bounded retry budget already set on each
+    Agent (retries=2), rather than crashing the whole node. This is a
+    different case from a tool call that succeeds but returns
+    sparse/incomplete real data - that's not an error at all, just
+    less data for the model's own judgment to weigh, and is untouched
+    by this setting either way. _verify_ticker's direct_call_tool call
+    is unaffected: yfinance_get_ticker_info is confirmed (Phase 4 live
+    testing) to never raise ToolError even on a fake ticker - it
+    returns a near-empty payload instead - regardless of this setting.
 
     `.filtered(...)` removes options-chain/gapper-screener tools from
     what the model can even see - a structural guardrail (CLAUDE.md:
@@ -65,5 +72,5 @@ def get_yfinance_toolset() -> FilteredToolset:
     """
     transport = StdioTransport(command="uvx", args=["yfmcp@latest"])
     client = FastMCPClient(transport)
-    toolset = MCPToolset(client, tool_error_behavior="error")
+    toolset = MCPToolset(client, tool_error_behavior="retry")
     return toolset.filtered(lambda ctx, tool_def: tool_def.name not in _EXCLUDED_TOOLS)
