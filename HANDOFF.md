@@ -1,6 +1,6 @@
 # Session Handoff — Portfolio Advisor Fleet
 
-**Last updated:** 2026-09-11, end of the session that built Phases 1-4.
+**Last updated:** 2026-09-11, end of the session that built Phases 1-5.
 
 **Read this first in a new session**, then `CLAUDE.md` (project rules) and `plans/plan.md` (the full architecture plan with its decision log). This doc is the "what's been done, what's next" summary — the other two are the durable rulebook and design record.
 
@@ -37,6 +37,15 @@ This project is built entirely through the **`superpowers`** Claude Code plugin'
 - **Required real-model gate:** every LLM-calling phase must include one real, deliberate, cost-bounded run against the actual paid model, reviewed by the user, before the phase counts as done — this is what caught a genuine bug (`confidence` field had no bounds, model returned `7.0` once) that no amount of `TestModel`-only testing could have found. `TestModel` (free, `pydantic_ai.models.test`) is used for all automated tests of LLM-calling logic; the real check is separate and manual.
 - **Post-merge fix (2026-09-11, bounded, no branch):** the portfolio-fit check was a tautology (told a sector is a gap, asked to confirm it, no real data). Fixed: the node now builds a real holdings summary from `state["holdings_by_bucket"]` at call time (not hardcoded), baked into the Conviction Gate's system prompt. Verified end-to-end against the real graph output — genuinely reflects your actual 6 US holdings (GOOGL, IBM, MU, SMH, VOO, IAU), and updates automatically as the portfolio changes.
 
+**Phase 5 — India Equity Specialist.** `src/agentic_frameworks/graph/nodes/india_equity_specialist.py`. Second new-buy specialist, same three-stage pipeline as Phase 4 (propose → verify → Conviction Gate), reusing the same model pair and `yfinance-mcp` toolset (already confirmed to resolve `.NS`-suffixed NSE tickers). One real design change from Phase 4: gap sectors are **computed live from real holdings** (`_compute_india_equity_gaps`, `_compute_us_gaps`), not a hardcoded list — this also retrofitted a real bug fix into the Phase 4 US specialist, whose hardcoded `US_GAP_SECTORS` list was found to omit "Information Technology" (frozen at a point in time when the portfolio already held it). `ProposedCandidate.sector` was generalized to validate against the full 11-bucket GICS taxonomy (`GICS_SECTORS`), shared by both specialists. Both specialists are now wired into `build_graph()` as parallel branches off `risk_analyst` — the graph's first real fan-out (both still dead-end at `END`, no Synthesizer yet). `_apply_candidate_cap` was extracted into a shared `nodes/_specialist_helpers.py` module to avoid duplicating cap logic between specialists.
+
+- **Design decisions, confirmed with the user during this phase's brainstorming:**
+  - Gap computation is equity-only for both specialists — ETF `sector` values (e.g. "US Large Cap", "Gold") aren't real GICS sectors, and mutual fund `sector` values are fund *category* not GICS sector; including either would mean fabricating coverage that isn't actually known. Whole-portfolio gap analysis (rolling up sector coverage across mutual funds too) was explicitly deferred to the future Mutual Fund Specialist phase, which can supply real fund-holdings sector data.
+  - **Real estate is the one exception:** since the user's real estate holding is a directly known fact (not an inferred category), `_compute_india_equity_gaps` treats "Real Estate" as covered whenever `holdings_by_bucket["real_estate"]["IN"]` is non-empty — confirmed against the real portfolio to correctly leave `{"Energy"}` as the only current India equity gap (previously `{"Energy", "Real Estate"}` before this fix).
+- **Post-final-review fixes (same phase, before merge):**
+  - The whole-branch review caught that widening `ProposedCandidate.sector` to the full GICS taxonomy (needed for live gap computation) removed the schema-level guarantee that a candidate actually addresses a gap. Fixed: a shared `_filter_to_gap_sectors` helper drops off-gap candidates before the cap/verification/evaluation stages, in both specialists. Also added reject-early: both nodes now return an empty candidate list immediately if the live gap list is empty, before any model/toolset setup — avoiding a real LLM call on an empty-content prompt.
+  - **Real-model verification (2026-09-11) caught a second, more serious bug:** `get_yfinance_toolset()` had `tool_error_behavior="error"`, meaning ANY tool-call problem (including a benign one, like the model omitting a required argument) crashed the whole node with a hard `fastmcp.exceptions.ToolError`, rather than giving the model a bounded chance to self-correct via `ModelRetry` (already bounded by the existing `Agent(retries=2)`). This crashed the very first real-model run, live, on a real `yfinance_get_price_history` call missing its `symbol` argument. Fixed by switching to the library default `tool_error_behavior="retry"`. Re-verified: a subsequent real run hit two more real, legitimate tool errors (yfinance 404s for ONGC.NS and XLF fundamentals data) and recovered gracefully instead of crashing, producing 5 real US candidates (Health Care: XLV/UNH/JNJ Hold/Buy/Hold; Financials: XLF/JPM Buy/Hold) and 3 real India candidates (all Energy: RELIANCE.NS/ONGC.NS/IOC.NS, all Buy) — reviewed by the user, all confidence values valid (0.6–0.72), all genuinely advisory, no fabricated data.
+
 **Supporting infrastructure:**
 - `.env` (gitignored, user-populated) + `.env.example` (committed template) for `OPENROUTER_API_KEY`, auto-loaded via `python-dotenv`.
 - `docs/portfolio-gap-analysis.md` — a real, queried-live gap analysis of US/India equity sector coverage, used by the specialist's candidate generator.
@@ -45,23 +54,23 @@ This project is built entirely through the **`superpowers`** Claude Code plugin'
 
 ## What's explicitly NOT done yet (disclosed, not silent gaps)
 
-1. **India Equity Specialist** — not started. Should reuse most of Phase 4's pattern (`yfinance-mcp` already confirmed working for `.NS` tickers).
-2. **Mutual Fund Specialist** — not started. Needs a new MCP client for `MFapi.in` (free, no key, India mutual fund NAV/scheme data — not yet integrated anywhere in code, only researched/decided).
-3. **Recommendation Synthesizer** — not started. Cross-specialist reasoning, `pydantic-ai` structured output, and the human-approval gate on any sell/new-buy suggestion — none of this exists yet.
-4. **Full graph wiring** — only `Research → Risk Analyst` is actually wired into `build_graph()`. The 3 specialists (once all exist) need to fan out in parallel and feed into the Synthesizer, with a conditional edge routing sell/buy suggestions through human approval. Not started.
-5. **LangGraph Store** (cross-run memory — rejected candidates, cached style profile) — deferred three phases running. Real cost implication: right now, nothing stops the US specialist from re-researching and re-paying for a candidate it already rejected in a prior run. **User has asked for this to be its own phase, done after the next specialist, before further specialists.**
-6. **LangGraph Studio + LangSmith** (observability) — 0%, not started. Currently zero ability to watch a run happen or replay one after the fact; only pytest output exists.
-7. **Temporal** (durable daily monitor) — 0%, entirely separate stack piece, not touched.
-8. **Deployment** — explicitly deferred to P2 in `plan.md`, not blocking.
-9. Per-stack-component learning-checkpoint notes files (`notes/01-langgraph.md` etc., per `plan.md`'s Cross-Cutting Learning Checkpoint) — not started.
+1. **Mutual Fund Specialist** — not started. Needs a new MCP client for `MFapi.in` (free, no key, India mutual fund NAV/scheme data — not yet integrated anywhere in code, only researched/decided). Also needs its own Conviction Gate shape (category/expense-ratio/manager-consistency, not price/fundamentals — mutual funds aren't evaluated the way equities are).
+2. **Recommendation Synthesizer** — not started. Cross-specialist reasoning, `pydantic-ai` structured output, and the human-approval gate on any sell/new-buy suggestion — none of this exists yet.
+3. **Full graph fan-in** — `Research → Risk Analyst → {US Equity/ETF Specialist, India Equity Specialist}` (parallel) is wired, but both branches still dead-end at `END`. The Mutual Fund Specialist (once it exists) needs to join the fan-out, and all three need to feed into the Synthesizer, with a conditional edge routing sell/buy suggestions through human approval. Not started.
+4. **LangGraph Store** (cross-run memory — rejected candidates, cached style profile) — deferred four phases running. Real cost implication: right now, nothing stops either specialist from re-researching and re-paying for a candidate it already rejected in a prior run. **User has asked for this to be its own phase, done after the next specialist (Mutual Fund), before further specialists.**
+5. **LangGraph Studio + LangSmith** (observability) — 0%, not started. Currently zero ability to watch a run happen or replay one after the fact; only pytest output exists.
+6. **Temporal** (durable daily monitor) — 0%, entirely separate stack piece, not touched.
+7. **Deployment** — explicitly deferred to P2 in `plan.md`, not blocking.
+8. Per-stack-component learning-checkpoint notes files (`notes/01-langgraph.md` etc., per `plan.md`'s Cross-Cutting Learning Checkpoint) — not started.
 
-Rough overall completion estimate discussed with the user: **~30-35% of the full Plan A scope**, with the harder/riskier foundational infrastructure (data access, cost-controlled LLM calling, the harness, guardrail patterns) now proven and reusable — but the Synthesizer, full graph wiring, Store, Studio/LangSmith, and Temporal are all still fully ahead.
+Rough overall completion estimate discussed with the user: **~40-45% of the full Plan A scope**, with the harder/riskier foundational infrastructure (data access, cost-controlled LLM calling, the harness, guardrail patterns, live gap detection, and now two working new-buy specialists) proven and reusable — but the Mutual Fund Specialist, Synthesizer, full fan-in, Store, Studio/LangSmith, and Temporal are all still ahead.
 
 ## Agreed order for what's next (user's explicit instruction, end of this session)
 
 1. ~~Fix the portfolio-fit tautology~~ — **done**, see above.
-2. **Next specialist** (India Equity or Mutual Fund — not yet chosen, ask the user which) — this is the next thing to brainstorm.
-3. **LangGraph Store**, as its own dedicated phase, after the next specialist.
+2. ~~India Equity Specialist~~ — **done**, see Phase 5 above.
+3. **Mutual Fund Specialist** — next to brainstorm. New MCP client (`MFapi.in`), new Conviction Gate shape (category/expense-ratio/manager-consistency).
+4. **LangGraph Store**, as its own dedicated phase, after the Mutual Fund Specialist.
 
 ## Known secrets exposure this session (already mitigated, just for the record)
 
