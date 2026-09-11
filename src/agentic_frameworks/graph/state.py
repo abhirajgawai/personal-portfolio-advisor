@@ -42,13 +42,16 @@ class RiskState(TypedDict):
 
 
 class SpecialistState(TypedDict):
-    """State the US Equity/ETF Specialist node produces.
+    """State the new-buy specialist nodes produce.
 
-    us_equity_etf_candidates: the specialist's evaluated candidates,
-        each a `CandidateEvaluation` dict.
+    us_equity_etf_candidates: the US Equity/ETF Specialist's evaluated
+        candidates, each a `CandidateEvaluation` dict.
+    india_equity_candidates: the India Equity Specialist's evaluated
+        candidates, each a `CandidateEvaluation` dict.
     """
 
     us_equity_etf_candidates: list[dict]
+    india_equity_candidates: list[dict]
 
 
 class GraphState(TypedDict):
@@ -71,6 +74,8 @@ class GraphState(TypedDict):
     liquidity: liquidity risk measurements from Risk Analyst node.
     us_equity_etf_candidates: the US Equity/ETF Specialist's evaluated candidates,
         each a `CandidateEvaluation` dict.
+    india_equity_candidates: the India Equity Specialist's evaluated candidates,
+        each a `CandidateEvaluation` dict.
     """
 
     holdings: list[dict]
@@ -81,3 +86,4 @@ class GraphState(TypedDict):
     currency_exposure: dict
     liquidity: dict
     us_equity_etf_candidates: list[dict]
+    india_equity_candidates: list[dict]
