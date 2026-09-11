@@ -17,7 +17,7 @@ from pydantic_ai.toolsets.filtered import FilteredToolset
 from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
 from agentic_frameworks.graph.models import get_specialist_model
 from agentic_frameworks.graph.schemas import (
-    US_GAP_SECTORS,
+    GICS_SECTORS,
     CandidateEvaluation,
     ProposedCandidate,
 )
@@ -164,7 +164,7 @@ async def us_equity_etf_specialist_node(state: GraphState) -> SpecialistState:
 
     async with toolset:
         generator = _build_candidate_generator(model)
-        gap_sectors_text = ", ".join(US_GAP_SECTORS)
+        gap_sectors_text = ", ".join(GICS_SECTORS)
         generation_result = await generator.run(
             f"Propose candidates for these gap sectors: {gap_sectors_text}"
         )

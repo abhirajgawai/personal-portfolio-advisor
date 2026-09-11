@@ -64,3 +64,20 @@ def test_proposed_candidate_rejects_unknown_sector():
 
     with pytest.raises(ValidationError):
         ProposedCandidate(ticker="XOM", sector="Not A Real Sector")
+
+
+def test_proposed_candidate_accepts_information_technology():
+    from agentic_frameworks.graph.schemas import ProposedCandidate
+
+    candidate = ProposedCandidate(ticker="TCS.NS", sector="Information Technology")
+
+    assert candidate.sector == "Information Technology"
+
+
+def test_gics_sectors_has_eleven_standard_buckets():
+    from agentic_frameworks.graph.schemas import GICS_SECTORS
+
+    assert len(GICS_SECTORS) == 11
+    assert "Information Technology" in GICS_SECTORS
+    assert "Energy" in GICS_SECTORS
+    assert "Real Estate" in GICS_SECTORS

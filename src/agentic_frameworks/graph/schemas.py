@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-US_GAP_SECTORS = [
+GICS_SECTORS = [
     "Health Care",
     "Financials",
     "Energy",
@@ -21,14 +21,22 @@ US_GAP_SECTORS = [
     "Utilities",
     "Communication Services",
     "Materials",
+    "Information Technology",
 ]
 
 
 class ProposedCandidate(BaseModel):
-    """One ticker the candidate generator proposes for a specific gap sector."""
+    """One ticker the candidate generator proposes for a specific gap sector.
+
+    sector is validated against the full 11-bucket GICS taxonomy
+    (GICS_SECTORS), not a hardcoded subset - which sectors are actual
+    gaps for a given specialist/portfolio is computed live at runtime
+    (see _compute_us_gaps, _compute_india_equity_gaps), never baked
+    into this schema.
+    """
 
     ticker: str
-    sector: Literal[*US_GAP_SECTORS]
+    sector: Literal[*GICS_SECTORS]
 
 
 class CandidateEvaluation(BaseModel):
