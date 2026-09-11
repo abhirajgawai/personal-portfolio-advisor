@@ -21,7 +21,7 @@ from agentic_frameworks.graph.schemas import (
     CandidateEvaluation,
     ProposedCandidate,
 )
-from agentic_frameworks.graph.state import RiskState, SpecialistState
+from agentic_frameworks.graph.state import GraphState, SpecialistState
 
 
 async def _verify_ticker(symbol: str, toolset: FilteredToolset) -> bool:
@@ -47,6 +47,23 @@ async def _verify_ticker(symbol: str, toolset: FilteredToolset) -> bool:
 
 MAX_CANDIDATES_PER_SECTOR = 3
 MAX_CANDIDATES_TOTAL = 5
+
+
+def _summarize_us_holdings(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> str:
+    """Build a real, current summary of US equity/ETF holdings for the portfolio-fit check.
+
+    Built fresh from `holdings_by_bucket` on every node invocation - never
+    a hardcoded list - so it automatically reflects whatever the user
+    actually holds whenever this node runs, with no manual updates needed
+    as the portfolio changes.
+    """
+    lines = []
+    for asset_class in ("equity", "etf"):
+        for holding in holdings_by_bucket.get(asset_class, {}).get("US", []):
+            lines.append(f"- {holding['ticker']} ({holding['name']}), sector: {holding['sector']}")
+    if not lines:
+        return "The user currently holds no US equities or ETFs."
+    return "The user's current US equity/ETF holdings are:\n" + "\n".join(lines)
 
 _CANDIDATE_GENERATOR_SYSTEM_PROMPT = """You are a US equity/ETF research assistant for a personal \
 long-term portfolio advisor. Given a list of sector gaps in the user's \
@@ -84,12 +101,12 @@ def _apply_candidate_cap(candidates: list[ProposedCandidate]) -> list[ProposedCa
     return capped[:MAX_CANDIDATES_TOTAL]
 
 
-_CONVICTION_GATE_SYSTEM_PROMPT = """You are evaluating one US equity/ETF new-buy candidate for a \
+_CONVICTION_GATE_SYSTEM_PROMPT_TEMPLATE = """You are evaluating one US equity/ETF new-buy candidate for a \
 personal, long-term portfolio advisor, using the New-Buy Conviction \
 Gate. Run these four checks in order, stopping at the first failure:
 
 1. Portfolio-fit: does this candidate address a real, identified gap \
-in the user's current holdings?
+in the user's current holdings? {holdings_summary}
 2. Fundamentals: use your tools to check real financials (revenue, \
 earnings, debt, margins) - not assumptions.
 3. Valuation: is it reasonably priced now versus its own history and \
@@ -104,29 +121,37 @@ in risk_flags. This is advisory only - your output is never a trade \
 instruction, only a recommendation for the user to act on manually."""
 
 
-def _build_conviction_gate_evaluator(model, toolset: FilteredToolset) -> Agent:
+def _build_conviction_gate_evaluator(model, toolset: FilteredToolset, holdings_summary: str) -> Agent:
     """Build the Conviction Gate evaluator Agent.
 
+    holdings_summary: real, current US holdings (see _summarize_us_holdings)
+    baked into the system prompt so the portfolio-fit check has actual
+    data to check against, instead of just being told a sector is a gap
+    and asked to confirm it. Built once per node invocation and reused
+    across every candidate evaluated in that run, so it stays one stable,
+    cacheable string within a run (per CLAUDE.md's LLM cost control rule 3)
+    even though it varies run-to-run as the real portfolio changes.
     toolsets=[toolset] gives this agent real fundamentals/valuation
     data access via yfinance-mcp for the fundamentals/valuation checks.
     retries=2: bounded per CLAUDE.md's LLM cost control rule 6.
     """
+    system_prompt = _CONVICTION_GATE_SYSTEM_PROMPT_TEMPLATE.format(holdings_summary=holdings_summary)
     return Agent(
         model,
         output_type=CandidateEvaluation,
-        system_prompt=_CONVICTION_GATE_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         toolsets=[toolset],
         retries=2,
     )
 
 
-async def us_equity_etf_specialist_node(state: RiskState) -> SpecialistState:
+async def us_equity_etf_specialist_node(state: GraphState) -> SpecialistState:
     """Propose, verify, and evaluate US equity/ETF new-buy candidates.
 
-    `state` (RiskState) is intentionally unused today - this node only
-    needs the gap-sector list, not the Risk Analyst's output yet. The
-    annotation documents the real contract for when this node is wired
-    into the graph after the Risk Analyst node.
+    Reads `state["holdings_by_bucket"]` (Research node's output) to build
+    a real, current US-holdings summary for the Conviction Gate's
+    portfolio-fit check - not a hardcoded list, so it automatically
+    reflects whatever the user actually holds by the time this node runs.
 
     Fails loud: any LLM/tool/verification error propagates uncaught.
     Cost control: reject-early (ticker verification before the Conviction
@@ -135,6 +160,7 @@ async def us_equity_etf_specialist_node(state: RiskState) -> SpecialistState:
     """
     model = get_specialist_model()
     toolset = get_yfinance_toolset()
+    holdings_summary = _summarize_us_holdings(state["holdings_by_bucket"])
 
     async with toolset:
         generator = _build_candidate_generator(model)
@@ -150,7 +176,7 @@ async def us_equity_etf_specialist_node(state: RiskState) -> SpecialistState:
             if await _verify_ticker(candidate.ticker, toolset)
         ]
 
-        evaluator = _build_conviction_gate_evaluator(model, toolset)
+        evaluator = _build_conviction_gate_evaluator(model, toolset, holdings_summary)
         evaluations = []
         for candidate in verified_candidates:
             eval_result = await evaluator.run(

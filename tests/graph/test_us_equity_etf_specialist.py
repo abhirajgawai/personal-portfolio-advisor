@@ -59,6 +59,38 @@ async def test_candidate_generator_produces_proposed_candidates():
     assert all(hasattr(c, "ticker") and hasattr(c, "sector") for c in result.output)
 
 
+def test_summarize_us_holdings_lists_real_equity_and_etf_holdings():
+    from agentic_frameworks.graph.nodes.us_equity_etf_specialist import (
+        _summarize_us_holdings,
+    )
+
+    holdings_by_bucket = {
+        "equity": {
+            "US": [{"ticker": "GOOGL", "name": "Alphabet Inc", "sector": "Technology"}],
+            "IN": [{"ticker": "TCS", "name": "Tata Consultancy Services", "sector": "IT"}],
+        },
+        "etf": {
+            "US": [{"ticker": "VOO", "name": "Vanguard S&P 500 ETF", "sector": "US Large Cap"}],
+        },
+    }
+
+    summary = _summarize_us_holdings(holdings_by_bucket)
+
+    assert "GOOGL" in summary
+    assert "VOO" in summary
+    assert "TCS" not in summary
+
+
+def test_summarize_us_holdings_handles_no_us_holdings():
+    from agentic_frameworks.graph.nodes.us_equity_etf_specialist import (
+        _summarize_us_holdings,
+    )
+
+    summary = _summarize_us_holdings({})
+
+    assert "no US equities or ETFs" in summary
+
+
 async def test_conviction_gate_evaluator_produces_candidate_evaluation():
     from pydantic_ai.models.test import TestModel
 
@@ -69,7 +101,9 @@ async def test_conviction_gate_evaluator_produces_candidate_evaluation():
 
     toolset = get_yfinance_toolset()
     async with toolset:
-        evaluator = _build_conviction_gate_evaluator(TestModel(), toolset)
+        evaluator = _build_conviction_gate_evaluator(
+            TestModel(), toolset, "The user currently holds no US equities or ETFs."
+        )
         result = await evaluator.run("Evaluate ticker: XOM, gap sector: Energy")
 
         assert result.output.action in {"Buy", "Hold", "Sell", "Reduce"}
@@ -84,10 +118,21 @@ async def test_us_equity_etf_specialist_node_returns_candidate_evaluations():
     def fake_get_specialist_model():
         return TestModel()
 
+    state = {
+        "holdings_by_bucket": {
+            "equity": {
+                "US": [{"ticker": "GOOGL", "name": "Alphabet Inc", "sector": "Technology"}],
+            },
+            "etf": {
+                "US": [{"ticker": "VOO", "name": "Vanguard S&P 500 ETF", "sector": "US Large Cap"}],
+            },
+        }
+    }
+
     original = specialist_module.get_specialist_model
     specialist_module.get_specialist_model = fake_get_specialist_model
     try:
-        result = await specialist_module.us_equity_etf_specialist_node({})
+        result = await specialist_module.us_equity_etf_specialist_node(state)
     finally:
         specialist_module.get_specialist_model = original
 
