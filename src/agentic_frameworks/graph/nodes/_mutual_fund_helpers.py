@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date, datetime
 
 from agentic_frameworks.graph.schemas import MF_CATEGORY_TAXONOMY
 
@@ -97,3 +98,24 @@ async def _resolve_scheme_code(name: str, isin: str, toolset) -> int:
             if n_words <= 2:
                 break
     raise ValueError(f"No MFapi.in scheme found matching name={name!r} isin={isin!r}")
+
+
+def _parse_mfapi_date(date_str: str) -> date:
+    """Parse a date string in DD-MM-YYYY format (MFapi.in standard)."""
+    return datetime.strptime(date_str, "%d-%m-%Y").date()
+
+
+async def _fetch_nav_history(scheme_code: int, toolset) -> list[dict]:
+    """Fetch a scheme's full NAV history, parsed and sorted chronologically.
+
+    MFapi.in returns newest-first; this re-sorts ascending since every
+    downstream computation (CAGR, resampling, drawdown) reasons forward
+    in time.
+    """
+    result = await toolset.direct_call_tool("get_scheme_nav", {"scheme_code": scheme_code})
+    raw = json.loads(result)
+    history = [
+        {"date": _parse_mfapi_date(entry["date"]), "nav": float(entry["nav"])}
+        for entry in raw["data"]
+    ]
+    return sorted(history, key=lambda h: h["date"])

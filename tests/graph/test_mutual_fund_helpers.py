@@ -82,3 +82,20 @@ async def test_resolve_scheme_code_raises_on_no_match():
             await _resolve_scheme_code(
                 "Completely Fictional Nonexistent Mutual Fund XYZ", "INF000000000", toolset
             )
+
+
+async def test_fetch_nav_history_returns_chronological_real_data():
+    from datetime import date
+
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _fetch_nav_history
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        history = await _fetch_nav_history(122639, toolset)
+
+    assert len(history) > 1000
+    assert all(isinstance(h["date"], date) for h in history)
+    assert all(isinstance(h["nav"], float) for h in history)
+    assert history[0]["date"] < history[-1]["date"]
+    assert history[0]["date"] == date(2013, 5, 28)
