@@ -81,3 +81,12 @@ def test_gics_sectors_has_eleven_standard_buckets():
     assert "Information Technology" in GICS_SECTORS
     assert "Energy" in GICS_SECTORS
     assert "Real Estate" in GICS_SECTORS
+
+
+def test_mf_category_taxonomy_has_expected_entries():
+    from agentic_frameworks.graph.schemas import MF_CATEGORY_TAXONOMY
+
+    assert "Large Cap" in MF_CATEGORY_TAXONOMY
+    assert "Gilt" in MF_CATEGORY_TAXONOMY
+    assert "Index Fund" in MF_CATEGORY_TAXONOMY
+    assert len(MF_CATEGORY_TAXONOMY) == 13

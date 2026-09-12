@@ -24,6 +24,22 @@ GICS_SECTORS = [
     "Information Technology",
 ]
 
+MF_CATEGORY_TAXONOMY = [
+    "Large Cap",
+    "Mid Cap",
+    "Small Cap",
+    "Flexi Cap",
+    "Multi Cap",
+    "ELSS",
+    "Aggressive Hybrid",
+    "Conservative Hybrid",
+    "Liquid",
+    "Short Duration",
+    "Corporate Bond",
+    "Gilt",
+    "Index Fund",
+]
+
 
 class ProposedCandidate(BaseModel):
     """One ticker the candidate generator proposes for a specific gap sector.
