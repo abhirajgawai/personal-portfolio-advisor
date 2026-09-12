@@ -321,11 +321,53 @@ from Phase 4's yfinance-mcp reuse decision."
 ### Task 3: MF category taxonomy, real-category mapping, and benchmark ticker tables
 
 **Files:**
+- Modify: `src/agentic_frameworks/graph/schemas.py`
 - Create: `src/agentic_frameworks/graph/nodes/_mutual_fund_helpers.py`
+- Test: Modify `tests/graph/test_schemas.py`
 - Test: Create `tests/graph/test_mutual_fund_helpers.py`
 
 **Interfaces:**
-- Produces: `MF_CATEGORY_TAXONOMY: list[str]`, `MF_CATEGORY_TO_TAXONOMY: dict[str, str]`, `MF_CATEGORY_BENCHMARK_TICKERS: dict[str, str | None]`, `INDEX_FUND_BENCHMARK_TICKERS_BY_ISIN: dict[str, str | None]` — consumed by Task 4 onward and by both node tasks.
+- Produces: `MF_CATEGORY_TAXONOMY: list[str]` (in `schemas.py`, mirroring where `GICS_SECTORS` already lives — node modules import taxonomy constants FROM `schemas.py`, never the reverse, per this project's established layering), `MF_CATEGORY_TO_TAXONOMY: dict[str, str]`, `MF_CATEGORY_BENCHMARK_TICKERS: dict[str, str | None]`, `INDEX_FUND_BENCHMARK_TICKERS_BY_ISIN: dict[str, str | None]` (all three in `_mutual_fund_helpers.py`) — consumed by Task 4 onward, Task 10's `ProposedFundCandidate`, and both node tasks.
+
+- [ ] **Step 0: Add `MF_CATEGORY_TAXONOMY` to `schemas.py`**
+
+Add to `tests/graph/test_schemas.py`:
+
+```python
+def test_mf_category_taxonomy_has_expected_entries():
+    from agentic_frameworks.graph.schemas import MF_CATEGORY_TAXONOMY
+
+    assert "Large Cap" in MF_CATEGORY_TAXONOMY
+    assert "Gilt" in MF_CATEGORY_TAXONOMY
+    assert "Index Fund" in MF_CATEGORY_TAXONOMY
+    assert len(MF_CATEGORY_TAXONOMY) == 13
+```
+
+Run: `.venv/Scripts/python.exe -m pytest tests/graph/test_schemas.py -k mf_category_taxonomy -v`
+Expected: FAIL with `ImportError: cannot import name 'MF_CATEGORY_TAXONOMY'`.
+
+Add to `src/agentic_frameworks/graph/schemas.py`, after the existing `GICS_SECTORS` list:
+
+```python
+MF_CATEGORY_TAXONOMY = [
+    "Large Cap",
+    "Mid Cap",
+    "Small Cap",
+    "Flexi Cap",
+    "Multi Cap",
+    "ELSS",
+    "Aggressive Hybrid",
+    "Conservative Hybrid",
+    "Liquid",
+    "Short Duration",
+    "Corporate Bond",
+    "Gilt",
+    "Index Fund",
+]
+```
+
+Run: `.venv/Scripts/python.exe -m pytest tests/graph/test_schemas.py -k mf_category_taxonomy -v`
+Expected: PASS.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -335,15 +377,6 @@ Create `tests/graph/test_mutual_fund_helpers.py`:
 """Tests for the Mutual Fund Specialist nodes' shared helpers."""
 
 from __future__ import annotations
-
-
-def test_mf_category_taxonomy_has_expected_entries():
-    from agentic_frameworks.graph.nodes._mutual_fund_helpers import MF_CATEGORY_TAXONOMY
-
-    assert "Large Cap" in MF_CATEGORY_TAXONOMY
-    assert "Gilt" in MF_CATEGORY_TAXONOMY
-    assert "Index Fund" in MF_CATEGORY_TAXONOMY
-    assert len(MF_CATEGORY_TAXONOMY) == 13
 
 
 def test_mf_category_to_taxonomy_maps_all_five_real_categories():
@@ -404,21 +437,7 @@ are added in later tasks in this same file.
 
 from __future__ import annotations
 
-MF_CATEGORY_TAXONOMY = [
-    "Large Cap",
-    "Mid Cap",
-    "Small Cap",
-    "Flexi Cap",
-    "Multi Cap",
-    "ELSS",
-    "Aggressive Hybrid",
-    "Conservative Hybrid",
-    "Liquid",
-    "Short Duration",
-    "Corporate Bond",
-    "Gilt",
-    "Index Fund",
-]
+from agentic_frameworks.graph.schemas import MF_CATEGORY_TAXONOMY
 
 MF_CATEGORY_TO_TAXONOMY = {
     "Flexi Cap": "Flexi Cap",
@@ -459,14 +478,17 @@ Expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/agentic_frameworks/graph/nodes/_mutual_fund_helpers.py tests/graph/test_mutual_fund_helpers.py
+git add src/agentic_frameworks/graph/schemas.py src/agentic_frameworks/graph/nodes/_mutual_fund_helpers.py tests/graph/test_schemas.py tests/graph/test_mutual_fund_helpers.py
 git commit -m "feat: add curated MF category taxonomy and live-verified benchmark tickers
 
-Live-verified via yfinance-mcp this session: exact-index matches for
-2 of 4 existing index funds, category-proxy matches for the equity
-categories, confirmed unavailable for the hybrid and debt categories.
-Index funds get their own per-ISIN mapping since their exact tracked
-index varies per fund, not per category."
+MF_CATEGORY_TAXONOMY lives in schemas.py alongside GICS_SECTORS,
+following this project's established layering (node modules import
+taxonomy constants from schemas.py, never the reverse). Benchmark
+tickers live-verified via yfinance-mcp this session: exact-index
+matches for 2 of 4 existing index funds, category-proxy matches for
+the equity categories, confirmed unavailable for the hybrid and debt
+categories. Index funds get their own per-ISIN mapping since their
+exact tracked index varies per fund, not per category."
 ```
 
 ---
@@ -1238,7 +1260,7 @@ whole mutual fund book."
 - Test: Modify `tests/graph/test_schemas.py`
 
 **Interfaces:**
-- Consumes: `MF_CATEGORY_TAXONOMY` (Task 3).
+- Consumes: `MF_CATEGORY_TAXONOMY` (already added to `schemas.py` by Task 3 — no new import needed, it's already in this same file).
 - Produces: `ProposedFundCandidate(BaseModel)`: `scheme_name: str`, `category: Literal[*MF_CATEGORY_TAXONOMY]` — consumed by Task 13's candidate generator.
 
 - [ ] **Step 1: Write failing tests**
@@ -1269,12 +1291,9 @@ Expected: FAIL with `ImportError: cannot import name 'ProposedFundCandidate'`.
 
 - [ ] **Step 3: Add the schema**
 
-In `src/agentic_frameworks/graph/schemas.py`, add after the existing `ProposedCandidate` class:
+In `src/agentic_frameworks/graph/schemas.py`, add after the existing `ProposedCandidate` class (no new import needed — `MF_CATEGORY_TAXONOMY` already lives in this file, added by Task 3):
 
 ```python
-from agentic_frameworks.graph.nodes._mutual_fund_helpers import MF_CATEGORY_TAXONOMY
-
-
 class ProposedFundCandidate(BaseModel):
     """One mutual fund the candidate generator proposes for a specific gap category.
 
@@ -1287,8 +1306,6 @@ class ProposedFundCandidate(BaseModel):
     scheme_name: str
     category: Literal[*MF_CATEGORY_TAXONOMY]
 ```
-
-**Note on import placement:** this creates a dependency from `schemas.py` on `graph/nodes/_mutual_fund_helpers.py`. Place the import at the top of `schemas.py` alongside the other imports, not inline in the class - check the existing import block and add it there in the correct alphabetical/grouping position consistent with the file's existing style.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
