@@ -305,3 +305,88 @@ def test_compute_redundancy_correlations_identifies_perfectly_correlated_funds()
     assert abs(correlations["ISIN_A"]["ISIN_B"] - 1.0) < 0.001
     assert abs(correlations["ISIN_B"]["ISIN_A"] - 1.0) < 0.001
     assert "ISIN_A" not in correlations["ISIN_A"]
+
+
+def test_compute_redundancy_correlations_skips_pair_with_fewer_than_two_common_months():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_redundancy_correlations,
+    )
+
+    # Fund A resamples to monthly NAVs for Jan/Feb/Mar 2024, giving
+    # monthly returns keyed by (2024, 2) [Jan->Feb] and (2024, 3)
+    # [Feb->Mar]. Fund B only has Feb/Mar 2024, giving a single monthly
+    # return keyed by (2024, 3) [Feb->Mar]. The two funds therefore
+    # share exactly one common resampled month - below the len(...) < 2
+    # threshold the implementation requires - so this pair must be
+    # skipped entirely rather than crashing (division by zero/undefined
+    # stdev) or fabricating a correlation from a single data point.
+    fund_a = [
+        {"date": date(2024, 1, 1), "nav": 100.0},
+        {"date": date(2024, 2, 1), "nav": 105.0},
+        {"date": date(2024, 3, 1), "nav": 110.0},
+    ]
+    fund_b = [
+        {"date": date(2024, 2, 1), "nav": 200.0},
+        {"date": date(2024, 3, 1), "nav": 210.0},
+    ]
+
+    correlations = _compute_redundancy_correlations({"ISIN_A": fund_a, "ISIN_B": fund_b})
+
+    # Skipped means "not present as a key at all" - the implementation
+    # pre-seeds an empty dict per fund and only adds an entry for pairs
+    # that clear the >= 2 common months bar, so a skipped pair must be
+    # absent from both sides' correlation maps (not present as, say,
+    # None or 0.0).
+    assert "ISIN_B" not in correlations["ISIN_A"]
+    assert "ISIN_A" not in correlations["ISIN_B"]
+    assert correlations["ISIN_A"] == {}
+    assert correlations["ISIN_B"] == {}
+
+
+def test_compute_redundancy_correlations_computes_genuine_non_scalar_correlation():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_redundancy_correlations,
+    )
+
+    # Fund A and Fund B are NOT scalar multiples of each other (their
+    # NAV ratio changes every month: 100/100, 105/110, 126/121,
+    # 132.3/108.9), so a correct "correlate the monthly RETURNS"
+    # implementation and a buggy "correlate the raw NAV levels"
+    # implementation would produce two genuinely different numbers here
+    # (see hand-computation below) - unlike the existing 2x-scalar
+    # fixture, which can't tell the two implementations apart.
+    #
+    # Monthly returns (resampling is a no-op here - one NAV entry per
+    # calendar month):
+    #   Fund A: Jan->Feb +10%, Feb->Mar +10%, Mar->Apr -10%
+    #   Fund B: Jan->Feb  +5%, Feb->Mar +20%, Mar->Apr  +5%
+    #
+    # Hand-computed Pearson correlation of these two return series
+    # (verified exactly using fractions, see task report):
+    #   mean_A = 1/30, mean_B = 1/10
+    #   deviations_A = [1/15, 1/15, -2/15]
+    #   deviations_B = [-1/20, 1/10, -1/20]
+    #   sum(dev_A * dev_B) = 1/100
+    #   sum(dev_A^2) = 2/75, sum(dev_B^2) = 3/200
+    #   r = (1/100) / sqrt((2/75) * (3/200)) = 0.01 / 0.02 = 0.5 exactly
+    fund_a = [
+        {"date": date(2024, 1, 1), "nav": 100.0},
+        {"date": date(2024, 2, 1), "nav": 110.0},
+        {"date": date(2024, 3, 1), "nav": 121.0},
+        {"date": date(2024, 4, 1), "nav": 108.9},
+    ]
+    fund_b = [
+        {"date": date(2024, 1, 1), "nav": 100.0},
+        {"date": date(2024, 2, 1), "nav": 105.0},
+        {"date": date(2024, 3, 1), "nav": 126.0},
+        {"date": date(2024, 4, 1), "nav": 132.3},
+    ]
+
+    correlations = _compute_redundancy_correlations({"ISIN_A": fund_a, "ISIN_B": fund_b})
+
+    assert abs(correlations["ISIN_A"]["ISIN_B"] - 0.5) < 0.001
+    assert abs(correlations["ISIN_B"]["ISIN_A"] - 0.5) < 0.001
