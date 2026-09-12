@@ -39,3 +39,46 @@ def test_index_fund_benchmark_tickers_by_isin_reflect_live_verification():
     assert INDEX_FUND_BENCHMARK_TICKERS_BY_ISIN["INF789F1AUT5"] == "NIFTY200MOMENTM30.NS"
     assert INDEX_FUND_BENCHMARK_TICKERS_BY_ISIN["INF754K01QD2"] is None
     assert INDEX_FUND_BENCHMARK_TICKERS_BY_ISIN["INF789F1AYN0"] is None
+
+
+async def test_resolve_scheme_code_matches_real_fund_by_isin():
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _resolve_scheme_code
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        code = await _resolve_scheme_code(
+            "Parag Parikh Flexi Cap Fund - Direct Plan Growth", "INF879O01027", toolset
+        )
+
+    assert code == 122639
+
+
+async def test_resolve_scheme_code_handles_letter_digit_spacing_mismatch():
+    """Real edge case: the portfolio's stored name has 'Nifty200' (no
+    space) while MFapi.in stores 'Nifty 200' (with space) for this
+    specific fund - confirmed live this session. The resolver must
+    normalize this, not just try the raw name.
+    """
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _resolve_scheme_code
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        code = await _resolve_scheme_code(
+            "UTI Nifty200 Momentum 30 Index Fund - Direct Plan (Demat)", "INF789F1AUT5", toolset
+        )
+
+    assert code == 148703
+
+
+async def test_resolve_scheme_code_raises_on_no_match():
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _resolve_scheme_code
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        with __import__("pytest").raises(ValueError):
+            await _resolve_scheme_code(
+                "Completely Fictional Nonexistent Mutual Fund XYZ", "INF000000000", toolset
+            )
