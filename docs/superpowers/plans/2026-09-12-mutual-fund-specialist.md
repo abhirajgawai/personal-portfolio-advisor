@@ -580,12 +580,16 @@ def _normalize_letter_digit_spacing(name: str) -> str:
 
 
 async def _search_scheme(query: str, toolset) -> list[dict]:
-    result = await toolset.wrapped.direct_call_tool("search_scheme", {"query": query})
+    """toolset here is the plain MCPToolset returned by get_mfapi_toolset()
+    (not a FilteredToolset like the yfinance toolset), so it exposes
+    direct_call_tool directly - no .wrapped indirection needed, unlike
+    calls against the yfinance toolset elsewhere in this file."""
+    result = await toolset.direct_call_tool("search_scheme", {"query": query})
     return json.loads(result)
 
 
 async def _get_scheme_isin(scheme_code: int, toolset) -> str | None:
-    result = await toolset.wrapped.direct_call_tool("get_scheme_nav", {"scheme_code": scheme_code})
+    result = await toolset.direct_call_tool("get_scheme_nav", {"scheme_code": scheme_code})
     data = json.loads(result)
     return data["meta"].get("isin_growth")
 
@@ -692,7 +696,7 @@ async def _fetch_nav_history(scheme_code: int, toolset) -> list[dict]:
     downstream computation (CAGR, resampling, drawdown) reasons forward
     in time.
     """
-    result = await toolset.wrapped.direct_call_tool("get_scheme_nav", {"scheme_code": scheme_code})
+    result = await toolset.direct_call_tool("get_scheme_nav", {"scheme_code": scheme_code})
     raw = json.loads(result)
     history = [
         {"date": _parse_mfapi_date(entry["date"]), "nav": float(entry["nav"])}
@@ -1776,7 +1780,7 @@ async def _resolve_scheme_by_name_and_direct_plan(scheme_name: str, toolset) -> 
     candidates = await _search_scheme(scheme_name, toolset)
     for candidate in candidates:
         if "direct" in candidate["scheme_name"].lower():
-            result = await toolset.wrapped.direct_call_tool(
+            result = await toolset.direct_call_tool(
                 "get_scheme_nav", {"scheme_code": candidate["scheme_code"]}
             )
             detail = json.loads(result)
