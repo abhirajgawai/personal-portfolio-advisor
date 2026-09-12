@@ -218,6 +218,49 @@ async def test_compute_benchmark_difference_returns_none_when_ticker_unavailable
     assert result is None
 
 
+async def test_compute_benchmark_difference_returns_none_when_years_is_zero():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_benchmark_difference,
+    )
+
+    # Single-entry history - track_record_years will be 0, so this must
+    # return None WITHOUT making any real network call (verifying the
+    # reject-early fix: pass toolset=None to prove the function never
+    # tries to use it).
+    fund_history = [{"date": date(2026, 1, 1), "nav": 100.0}]
+
+    result = await _compute_benchmark_difference(fund_history, "^NSEI", None)
+
+    assert result is None
+
+
+async def test_compute_benchmark_difference_returns_none_when_benchmark_lacks_coverage():
+    from datetime import date
+
+    from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_benchmark_difference,
+    )
+
+    # NIFTYSMLCAP250.NS's real yfinance history only starts 2005-04-01
+    # (live-verified). A fund date range entirely before that has no
+    # benchmark data to compare against on either end, so this must
+    # return None - a real, disclosed coverage gap, not a fabricated
+    # comparison.
+    fund_history = [
+        {"date": date(1990, 1, 1), "nav": 100.0},
+        {"date": date(2000, 1, 1), "nav": 130.0},
+    ]
+
+    toolset = get_yfinance_toolset()
+    async with toolset:
+        result = await _compute_benchmark_difference(fund_history, "NIFTYSMLCAP250.NS", toolset)
+
+    assert result is None
+
+
 async def test_compute_benchmark_difference_computes_real_comparison():
     from datetime import date
 

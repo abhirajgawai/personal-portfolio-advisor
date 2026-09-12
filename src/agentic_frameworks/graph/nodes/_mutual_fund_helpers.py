@@ -233,6 +233,8 @@ async def _compute_benchmark_difference(
 
     fund_metrics = _compute_fund_metrics(nav_history)
     years = fund_metrics["track_record_years"]
+    if years <= 0:
+        return None
 
     raw = await yfinance_toolset.wrapped.direct_call_tool(
         "yfinance_get_price_history", {"symbol": benchmark_ticker, "period": "max", "interval": "1mo"}
@@ -247,7 +249,7 @@ async def _compute_benchmark_difference(
     benchmark_end = _find_nav_on_or_before(
         [{"date": h["date"], "nav": h["close"]} for h in benchmark_history], end_date
     )
-    if benchmark_start is None or benchmark_end is None or years <= 0:
+    if benchmark_start is None or benchmark_end is None:
         return None
 
     benchmark_cagr = (benchmark_end["nav"] / benchmark_start["nav"]) ** (1 / years) - 1
