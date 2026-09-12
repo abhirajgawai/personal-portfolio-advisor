@@ -260,3 +260,38 @@ async def _compute_benchmark_difference(
         "benchmark_cagr": benchmark_cagr,
         "difference": fund_cagr - benchmark_cagr,
     }
+
+
+def _compute_redundancy_correlations(fund_histories: dict[str, list[dict]]) -> dict[str, dict[str, float]]:
+    """Pairwise Pearson correlation of monthly returns across funds, keyed by ISIN.
+
+    A statistical proxy for portfolio-holdings overlap (which MFapi.in
+    doesn't expose) - two funds whose NAV moves nearly identically are
+    functionally redundant even if their category labels differ, and
+    two funds with the same category label can still genuinely
+    diversify if their correlation is low. Symmetric: result[a][b] ==
+    result[b][a]. A fund never appears as its own key in its own row.
+    """
+    monthly_returns: dict[str, dict[tuple[int, int], float]] = {}
+    for isin, history in fund_histories.items():
+        monthly = _resample_month_end(history)
+        returns_by_month = {}
+        for i in range(1, len(monthly)):
+            if monthly[i - 1]["nav"] > 0:
+                key = (monthly[i]["date"].year, monthly[i]["date"].month)
+                returns_by_month[key] = (monthly[i]["nav"] / monthly[i - 1]["nav"]) - 1
+        monthly_returns[isin] = returns_by_month
+
+    result: dict[str, dict[str, float]] = {isin: {} for isin in fund_histories}
+    isins = list(fund_histories.keys())
+    for i, isin_a in enumerate(isins):
+        for isin_b in isins[i + 1:]:
+            common_months = sorted(set(monthly_returns[isin_a]) & set(monthly_returns[isin_b]))
+            if len(common_months) < 2:
+                continue
+            series_a = [monthly_returns[isin_a][m] for m in common_months]
+            series_b = [monthly_returns[isin_b][m] for m in common_months]
+            correlation = statistics.correlation(series_a, series_b)
+            result[isin_a][isin_b] = correlation
+            result[isin_b][isin_a] = correlation
+    return result

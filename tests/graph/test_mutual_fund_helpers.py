@@ -282,3 +282,26 @@ async def test_compute_benchmark_difference_computes_real_comparison():
     assert "fund_cagr" in result
     assert "benchmark_cagr" in result
     assert "difference" in result
+
+
+def test_compute_redundancy_correlations_identifies_perfectly_correlated_funds():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_redundancy_correlations,
+    )
+
+    # Fund B's NAV is always exactly 2x Fund A's - perfectly correlated (1.0).
+    fund_a = [
+        {"date": date(2024, 1, 1), "nav": 100.0},
+        {"date": date(2024, 2, 1), "nav": 110.0},
+        {"date": date(2024, 3, 1), "nav": 105.0},
+        {"date": date(2024, 4, 1), "nav": 120.0},
+    ]
+    fund_b = [{"date": h["date"], "nav": h["nav"] * 2} for h in fund_a]
+
+    correlations = _compute_redundancy_correlations({"ISIN_A": fund_a, "ISIN_B": fund_b})
+
+    assert abs(correlations["ISIN_A"]["ISIN_B"] - 1.0) < 0.001
+    assert abs(correlations["ISIN_B"]["ISIN_A"] - 1.0) < 0.001
+    assert "ISIN_A" not in correlations["ISIN_A"]
