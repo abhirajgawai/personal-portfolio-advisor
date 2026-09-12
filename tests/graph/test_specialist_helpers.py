@@ -42,3 +42,50 @@ def test_filter_to_gap_sectors_drops_off_gap_candidates():
 
     assert len(filtered) == 1
     assert filtered[0].ticker == "A1"
+
+
+def test_apply_candidate_cap_supports_custom_grouping_key():
+    from agentic_frameworks.graph.nodes._specialist_helpers import (
+        _apply_candidate_cap,
+    )
+
+    class FakeCandidate:
+        def __init__(self, name, category):
+            self.name = name
+            self.category = category
+
+    candidates = [
+        FakeCandidate("A1", "Large Cap"),
+        FakeCandidate("A2", "Large Cap"),
+        FakeCandidate("A3", "Large Cap"),
+        FakeCandidate("A4", "Large Cap"),
+        FakeCandidate("B1", "Gilt"),
+    ]
+
+    capped = _apply_candidate_cap(candidates, key=lambda c: c.category)
+
+    assert len(capped) == 4
+    large_cap_names = [c.name for c in capped if c.category == "Large Cap"]
+    assert len(large_cap_names) == 3
+    assert "A4" not in large_cap_names
+
+
+def test_filter_to_gap_sectors_supports_custom_grouping_key():
+    from agentic_frameworks.graph.nodes._specialist_helpers import (
+        _filter_to_gap_sectors,
+    )
+
+    class FakeCandidate:
+        def __init__(self, name, category):
+            self.name = name
+            self.category = category
+
+    candidates = [
+        FakeCandidate("A1", "Gilt"),
+        FakeCandidate("B1", "Large Cap"),
+    ]
+
+    filtered = _filter_to_gap_sectors(candidates, gap_sectors=["Gilt"], key=lambda c: c.category)
+
+    assert len(filtered) == 1
+    assert filtered[0].name == "A1"
