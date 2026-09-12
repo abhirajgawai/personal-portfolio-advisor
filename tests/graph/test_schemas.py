@@ -90,3 +90,19 @@ def test_mf_category_taxonomy_has_expected_entries():
     assert "Gilt" in MF_CATEGORY_TAXONOMY
     assert "Index Fund" in MF_CATEGORY_TAXONOMY
     assert len(MF_CATEGORY_TAXONOMY) == 13
+
+
+def test_proposed_fund_candidate_requires_scheme_name_and_category():
+    from agentic_frameworks.graph.schemas import ProposedFundCandidate
+
+    candidate = ProposedFundCandidate(scheme_name="Some Large Cap Fund Direct Growth", category="Large Cap")
+
+    assert candidate.scheme_name == "Some Large Cap Fund Direct Growth"
+    assert candidate.category == "Large Cap"
+
+
+def test_proposed_fund_candidate_rejects_unknown_category():
+    from agentic_frameworks.graph.schemas import ProposedFundCandidate
+
+    with pytest.raises(ValidationError):
+        ProposedFundCandidate(scheme_name="Some Fund", category="Not A Real Category")

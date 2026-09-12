@@ -55,6 +55,19 @@ class ProposedCandidate(BaseModel):
     sector: Literal[*GICS_SECTORS]
 
 
+class ProposedFundCandidate(BaseModel):
+    """One mutual fund the candidate generator proposes for a specific gap category.
+
+    category is validated against the full curated MF_CATEGORY_TAXONOMY,
+    not a hardcoded gap-subset - same reasoning as ProposedCandidate.sector:
+    which categories are actual gaps is computed live at runtime
+    (see _compute_mf_category_gaps), never baked into this schema.
+    """
+
+    scheme_name: str
+    category: Literal[*MF_CATEGORY_TAXONOMY]
+
+
 class CandidateEvaluation(BaseModel):
     """A new-buy specialist's verdict on one candidate, after the Conviction Gate."""
 
