@@ -439,12 +439,13 @@ async def test_resolve_scheme_by_name_and_direct_plan_finds_real_fund():
 
     toolset = get_mfapi_toolset()
     async with toolset:
-        scheme_code, category = await _resolve_scheme_by_name_and_direct_plan(
+        scheme_code, category, scheme_name = await _resolve_scheme_by_name_and_direct_plan(
             "ICICI Prudential Gilt Fund", toolset
         )
 
     assert scheme_code is not None
     assert "gilt" in category.lower()
+    assert "direct" in scheme_name.lower()
 
 
 async def test_resolve_scheme_by_name_and_direct_plan_raises_on_fabricated_name():
@@ -461,3 +462,77 @@ async def test_resolve_scheme_by_name_and_direct_plan_raises_on_fabricated_name(
             await _resolve_scheme_by_name_and_direct_plan(
                 "Completely Fictional Nonexistent Fund XYZ123", toolset
             )
+
+
+def test_category_matches_taxonomy_accepts_real_mfapi_category_strings():
+    """Live-verified real MFapi scheme_category strings (this session) for
+    every case exercised: the taxonomy category name is always a literal
+    (case-insensitive) substring."""
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _category_matches_taxonomy
+
+    assert _category_matches_taxonomy("Equity Scheme - Flexi Cap Fund", "Flexi Cap")
+    assert _category_matches_taxonomy("Equity Scheme - Small Cap Fund", "Small Cap")
+    assert _category_matches_taxonomy("Equity Schemes - ELSS- Tax Saver Fund", "ELSS")
+    assert _category_matches_taxonomy("Hybrid Scheme - Conservative Hybrid Fund", "Conservative Hybrid")
+    assert _category_matches_taxonomy("Index Funds - Equity Funds", "Index Fund")
+
+
+def test_category_matches_taxonomy_rejects_a_real_mismatch():
+    """A Gilt fund's real scheme_category must not be accepted as a match
+    for a candidate proposed under a different taxonomy category - this is
+    the exact class of mismatch Finding 1 guards against."""
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _category_matches_taxonomy
+
+    assert not _category_matches_taxonomy("Debt Scheme - Gilt Fund", "Flexi Cap")
+
+
+async def test_resolve_scheme_by_name_and_direct_plan_returns_verified_identity_for_mismatch_check():
+    """Confirms the resolved category for a real Gilt fund does NOT match
+    an unrelated taxonomy category - proving the combination of
+    _resolve_scheme_by_name_and_direct_plan + _category_matches_taxonomy
+    is what the specialist node relies on to drop a mismatched candidate
+    (Finding 1's node-level behavior, exercised directly here at the
+    helper level with a real fund)."""
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _category_matches_taxonomy,
+        _resolve_scheme_by_name_and_direct_plan,
+    )
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        _scheme_code, resolved_category, _scheme_name = await _resolve_scheme_by_name_and_direct_plan(
+            "ICICI Prudential Gilt Fund", toolset
+        )
+
+    assert _category_matches_taxonomy(resolved_category, "Gilt")
+    assert not _category_matches_taxonomy(resolved_category, "Small Cap")
+
+
+async def test_get_scheme_isin_uses_lightweight_meta_tool():
+    """Confirms _get_scheme_isin returns the correct real ISIN using the
+    new get_scheme_meta tool (Finding 4) - a real, unmocked resolution
+    against a known scheme."""
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _get_scheme_isin
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        isin = await _get_scheme_isin(122639, toolset)
+
+    assert isin == "INF879O01027"
+
+
+def test_compute_fund_metrics_returns_none_max_drawdown_for_single_entry_history():
+    """A single NAV point has no observable drawdown - this is different
+    from "confirmed zero drawdown" (the same fabrication class already
+    fixed for cagr_since_inception/volatility)."""
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _compute_fund_metrics
+
+    history = [{"date": date(2026, 1, 1), "nav": 100.0}]
+
+    metrics = _compute_fund_metrics(history)
+
+    assert metrics["max_drawdown"] is None

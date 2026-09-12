@@ -37,6 +37,25 @@ def search_scheme(query: str) -> str:
 
 
 @mcp.tool()
+def get_scheme_meta(scheme_code: int) -> str:
+    """Fetch a mutual fund scheme's metadata plus its single latest NAV entry.
+
+    Live-verified this session: MFapi.in's `/mf/<code>/latest` endpoint
+    returns the exact same {"meta": {...}, "data": [...]} shape as
+    `/mf/<code>` (get_scheme_nav) but with `data` truncated to just the
+    one most-recent NAV entry - a much cheaper call for callers that only
+    need scheme identity (e.g. isin_growth, scheme_category, scheme_name)
+    and don't need the full multi-hundred-KB NAV history.
+
+    Returns a JSON string: {"meta": {...7 fields...}, "data": [{"date": "DD-MM-YYYY", "nav": "..."}]}.
+    """
+    url = f"{_BASE_URL}/mf/{scheme_code}/latest"
+    with urllib.request.urlopen(url, timeout=15) as response:
+        raw = json.loads(response.read())
+    return json.dumps(raw)
+
+
+@mcp.tool()
 def get_scheme_nav(scheme_code: int) -> str:
     """Fetch a mutual fund scheme's metadata and full NAV history from MFapi.in.
 

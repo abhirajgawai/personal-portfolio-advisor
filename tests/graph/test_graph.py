@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 
-def test_build_graph_wires_all_five_nodes():
+def test_build_graph_wires_all_six_nodes():
     from agentic_frameworks.graph.graph import build_graph
 
     graph = build_graph()

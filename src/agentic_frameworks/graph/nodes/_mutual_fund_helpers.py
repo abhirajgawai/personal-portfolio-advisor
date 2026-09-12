@@ -2,8 +2,8 @@
 (mutual_fund_holdings_analyzer.py, mutual_fund_specialist.py).
 
 Curated taxonomy, real-category mapping, and live-verified benchmark
-ticker tables. Scheme resolution, NAV fetching, and metrics computation
-are added in later tasks in this same file.
+ticker tables, plus scheme resolution, NAV/meta fetching, and metrics
+computation - all consolidated in this one shared module.
 """
 
 from __future__ import annotations
@@ -70,7 +70,13 @@ async def _search_scheme(query: str, toolset) -> list[dict]:
 
 
 async def _get_scheme_isin(scheme_code: int, toolset) -> str | None:
-    result = await toolset.direct_call_tool("get_scheme_nav", {"scheme_code": scheme_code})
+    """Uses get_scheme_meta (meta + single latest NAV entry), not
+    get_scheme_nav (meta + full history) - this is called once per search
+    candidate during resolution, often many times per run, and only the
+    ISIN field is ever needed here. The full history is fetched separately
+    (once, via _fetch_nav_history) only after resolution actually succeeds.
+    """
+    result = await toolset.direct_call_tool("get_scheme_meta", {"scheme_code": scheme_code})
     data = json.loads(result)
     return data["meta"].get("isin_growth")
 
@@ -153,7 +159,9 @@ def _compute_fund_metrics(history: list[dict]) -> dict:
     undefined), volatility (float | None - annualized stdev of monthly
     returns, None only when fewer than 2 monthly return observations
     exist), max_drawdown (a non-positive fraction, e.g. -0.4 for a 40%
-    peak-to-trough decline).
+    peak-to-trough decline; None only when history has a single entry -
+    a single NAV point has no observable drawdown, which is different
+    from "confirmed zero drawdown").
     """
     latest = history[-1]
     oldest = history[0]
@@ -184,12 +192,15 @@ def _compute_fund_metrics(history: list[dict]) -> dict:
         statistics.stdev(monthly_returns) * (12 ** 0.5) if len(monthly_returns) >= 2 else None
     )
 
-    peak = history[0]["nav"]
-    max_drawdown = 0.0
-    for entry in history:
-        peak = max(peak, entry["nav"])
-        drawdown = (entry["nav"] - peak) / peak
-        max_drawdown = min(max_drawdown, drawdown)
+    if len(history) < 2:
+        max_drawdown = None
+    else:
+        peak = history[0]["nav"]
+        max_drawdown = 0.0
+        for entry in history:
+            peak = max(peak, entry["nav"])
+            drawdown = (entry["nav"] - peak) / peak
+            max_drawdown = min(max_drawdown, drawdown)
 
     return {
         "track_record_years": round(track_record_years, 2),
@@ -297,7 +308,7 @@ def _compute_redundancy_correlations(fund_histories: dict[str, list[dict]]) -> d
     return result
 
 
-async def _resolve_scheme_by_name_and_direct_plan(scheme_name: str, toolset) -> tuple[int, str]:
+async def _resolve_scheme_by_name_and_direct_plan(scheme_name: str, toolset) -> tuple[int, str, str]:
     """Verify a proposed (not-yet-held) fund name resolves to a real,
     currently-listed Direct-plan scheme.
 
@@ -305,18 +316,56 @@ async def _resolve_scheme_by_name_and_direct_plan(scheme_name: str, toolset) -> 
     an existing holding), a new-buy candidate has no ISIN yet - this is
     the anti-hallucination safeguard instead: a fabricated or delisted
     fund name returns no real search results at all. Returns
-    (scheme_code, scheme_category) for the first Direct-plan match found.
-    Raises ValueError (fail loud) if no genuine match exists.
+    (scheme_code, scheme_category, scheme_name) - all three from the
+    VERIFIED search hit, not the LLM's originally proposed name - for
+    the first Direct-plan match found. Uses get_scheme_meta (not
+    get_scheme_nav) since only identity fields are needed here, not the
+    full NAV history. Raises ValueError (fail loud) if no genuine match
+    exists.
+
+    Note: this accepts the FIRST Direct-plan search hit with no check
+    that it genuinely matches the proposed category - callers MUST
+    independently verify the returned scheme_category corresponds to
+    what was proposed (see _category_matches_taxonomy) before trusting
+    this as "the same fund the LLM meant", since a fuzzy/wrong search
+    match is possible for an ambiguous or generic proposed name.
     """
     candidates = await _search_scheme(scheme_name, toolset)
     for candidate in candidates:
         if "direct" in candidate["scheme_name"].lower():
             result = await toolset.direct_call_tool(
-                "get_scheme_nav", {"scheme_code": candidate["scheme_code"]}
+                "get_scheme_meta", {"scheme_code": candidate["scheme_code"]}
             )
             detail = json.loads(result)
-            return candidate["scheme_code"], detail["meta"]["scheme_category"]
+            return (
+                candidate["scheme_code"],
+                detail["meta"]["scheme_category"],
+                detail["meta"]["scheme_name"],
+            )
     raise ValueError(f"No real Direct-plan scheme found matching name={scheme_name!r}")
+
+
+def _category_matches_taxonomy(resolved_scheme_category: str, taxonomy_category: str) -> bool:
+    """Best-effort check that a verified MFapi scheme_category genuinely
+    corresponds to a curated MF_CATEGORY_TAXONOMY category.
+
+    There is no clean, exhaustive mapping from MFapi's raw scheme_category
+    strings (e.g. "Equity Scheme - Flexi Cap Fund", "Hybrid Scheme -
+    Conservative Hybrid Fund", "Index Funds - Equity Funds") to this
+    project's curated taxonomy - MFapi's naming isn't published as a
+    stable enum. Live-verified this session across every taxonomy
+    category: MFapi's scheme_category strings consistently embed the
+    taxonomy category name itself as a literal substring (case
+    differences aside), so a case-insensitive substring match is a
+    pragmatic, good-enough proxy - not a guaranteed-clean mapping. This
+    intentionally fails loud in the caller's favor: if the substring
+    isn't present, treat it as a mismatch (reject) rather than assume a
+    match, since a false rejection just drops one candidate while a
+    false acceptance would attach the wrong fund's real data to a
+    candidate shown under a different name (the exact bug this guards
+    against).
+    """
+    return taxonomy_category.lower() in resolved_scheme_category.lower()
 
 
 def _compute_mf_category_gaps(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> list[str]:
