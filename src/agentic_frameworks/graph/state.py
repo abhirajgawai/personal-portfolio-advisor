@@ -42,16 +42,23 @@ class RiskState(TypedDict):
 
 
 class SpecialistState(TypedDict):
-    """State the new-buy specialist nodes produce.
+    """State the new-buy specialist and holdings-analyzer nodes produce.
 
     us_equity_etf_candidates: the US Equity/ETF Specialist's evaluated
         candidates, each a `CandidateEvaluation` dict.
     india_equity_candidates: the India Equity Specialist's evaluated
         candidates, each a `CandidateEvaluation` dict.
+    existing_fund_evaluations: the Mutual Fund Holdings Analyzer's
+        verdicts on the real 9 existing IN mutual fund holdings, each
+        a `CandidateEvaluation` dict.
+    mutual_fund_candidates: the Mutual Fund Specialist's evaluated
+        new-buy candidates, each a `CandidateEvaluation` dict.
     """
 
     us_equity_etf_candidates: list[dict]
     india_equity_candidates: list[dict]
+    existing_fund_evaluations: list[dict]
+    mutual_fund_candidates: list[dict]
 
 
 class GraphState(TypedDict):
@@ -76,6 +83,10 @@ class GraphState(TypedDict):
         each a `CandidateEvaluation` dict.
     india_equity_candidates: the India Equity Specialist's evaluated candidates,
         each a `CandidateEvaluation` dict.
+    existing_fund_evaluations: the Mutual Fund Holdings Analyzer's verdicts on
+        the real 9 existing IN mutual fund holdings, each a `CandidateEvaluation` dict.
+    mutual_fund_candidates: the Mutual Fund Specialist's evaluated new-buy candidates,
+        each a `CandidateEvaluation` dict.
     """
 
     holdings: list[dict]
@@ -87,3 +98,5 @@ class GraphState(TypedDict):
     liquidity: dict
     us_equity_etf_candidates: list[dict]
     india_equity_candidates: list[dict]
+    existing_fund_evaluations: list[dict]
+    mutual_fund_candidates: list[dict]

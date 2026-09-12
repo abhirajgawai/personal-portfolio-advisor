@@ -28,9 +28,14 @@ def test_specialist_state_has_expected_keys():
     from agentic_frameworks.graph.state import SpecialistState
 
     hints = get_type_hints(SpecialistState)
-    assert set(hints.keys()) == {"us_equity_etf_candidates", "india_equity_candidates"}
-    assert hints["us_equity_etf_candidates"] == list[dict]
-    assert hints["india_equity_candidates"] == list[dict]
+    assert set(hints.keys()) == {
+        "us_equity_etf_candidates",
+        "india_equity_candidates",
+        "existing_fund_evaluations",
+        "mutual_fund_candidates",
+    }
+    assert hints["existing_fund_evaluations"] == list[dict]
+    assert hints["mutual_fund_candidates"] == list[dict]
 
 
 def test_graph_state_has_expected_keys():
@@ -47,6 +52,8 @@ def test_graph_state_has_expected_keys():
         "liquidity",
         "us_equity_etf_candidates",
         "india_equity_candidates",
+        "existing_fund_evaluations",
+        "mutual_fund_candidates",
     }
 
 
@@ -64,3 +71,19 @@ def test_graph_state_includes_india_equity_candidates():
     hints = get_type_hints(GraphState)
     assert "india_equity_candidates" in hints
     assert hints["india_equity_candidates"] == list[dict]
+
+
+def test_graph_state_includes_existing_fund_evaluations():
+    from agentic_frameworks.graph.state import GraphState
+
+    hints = get_type_hints(GraphState)
+    assert "existing_fund_evaluations" in hints
+    assert hints["existing_fund_evaluations"] == list[dict]
+
+
+def test_graph_state_includes_mutual_fund_candidates():
+    from agentic_frameworks.graph.state import GraphState
+
+    hints = get_type_hints(GraphState)
+    assert "mutual_fund_candidates" in hints
+    assert hints["mutual_fund_candidates"] == list[dict]
