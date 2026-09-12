@@ -429,3 +429,35 @@ def test_compute_mf_category_gaps_raises_on_unmapped_category():
 
     with pytest.raises(KeyError):
         _compute_mf_category_gaps(holdings_by_bucket)
+
+
+async def test_resolve_scheme_by_name_and_direct_plan_finds_real_fund():
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _resolve_scheme_by_name_and_direct_plan,
+    )
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        scheme_code, category = await _resolve_scheme_by_name_and_direct_plan(
+            "ICICI Prudential Gilt Fund", toolset
+        )
+
+    assert scheme_code is not None
+    assert "gilt" in category.lower()
+
+
+async def test_resolve_scheme_by_name_and_direct_plan_raises_on_fabricated_name():
+    import pytest
+
+    from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _resolve_scheme_by_name_and_direct_plan,
+    )
+
+    toolset = get_mfapi_toolset()
+    async with toolset:
+        with pytest.raises(ValueError):
+            await _resolve_scheme_by_name_and_direct_plan(
+                "Completely Fictional Nonexistent Fund XYZ123", toolset
+            )

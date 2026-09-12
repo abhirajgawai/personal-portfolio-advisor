@@ -297,6 +297,28 @@ def _compute_redundancy_correlations(fund_histories: dict[str, list[dict]]) -> d
     return result
 
 
+async def _resolve_scheme_by_name_and_direct_plan(scheme_name: str, toolset) -> tuple[int, str]:
+    """Verify a proposed (not-yet-held) fund name resolves to a real,
+    currently-listed Direct-plan scheme.
+
+    Unlike _resolve_scheme_code (which verifies against a KNOWN ISIN for
+    an existing holding), a new-buy candidate has no ISIN yet - this is
+    the anti-hallucination safeguard instead: a fabricated or delisted
+    fund name returns no real search results at all. Returns
+    (scheme_code, scheme_category) for the first Direct-plan match found.
+    Raises ValueError (fail loud) if no genuine match exists.
+    """
+    candidates = await _search_scheme(scheme_name, toolset)
+    for candidate in candidates:
+        if "direct" in candidate["scheme_name"].lower():
+            result = await toolset.direct_call_tool(
+                "get_scheme_nav", {"scheme_code": candidate["scheme_code"]}
+            )
+            detail = json.loads(result)
+            return candidate["scheme_code"], detail["meta"]["scheme_category"]
+    raise ValueError(f"No real Direct-plan scheme found matching name={scheme_name!r}")
+
+
 def _compute_mf_category_gaps(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> list[str]:
     """Live-compute curated MF categories with zero coverage in real IN mutual fund holdings.
 
