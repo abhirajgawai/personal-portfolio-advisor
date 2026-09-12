@@ -390,3 +390,42 @@ def test_compute_redundancy_correlations_computes_genuine_non_scalar_correlation
 
     assert abs(correlations["ISIN_A"]["ISIN_B"] - 0.5) < 0.001
     assert abs(correlations["ISIN_B"]["ISIN_A"] - 0.5) < 0.001
+
+
+async def test_compute_mf_category_gaps_finds_expected_gaps_given_real_holdings():
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_mf_category_gaps,
+    )
+    from agentic_frameworks.graph.nodes.research import research_node
+
+    research_result = await research_node({})
+
+    gaps = _compute_mf_category_gaps(research_result["holdings_by_bucket"])
+
+    assert set(gaps) == {
+        "Large Cap",
+        "Multi Cap",
+        "ELSS",
+        "Conservative Hybrid",
+        "Liquid",
+        "Short Duration",
+        "Corporate Bond",
+        "Gilt",
+    }
+
+
+def test_compute_mf_category_gaps_raises_on_unmapped_category():
+    import pytest
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_mf_category_gaps,
+    )
+
+    holdings_by_bucket = {
+        "mutual_fund": {
+            "IN": [{"ticker": "INF000000000", "name": "Fictional Fund", "sector": "Not A Real Category"}],
+        }
+    }
+
+    with pytest.raises(KeyError):
+        _compute_mf_category_gaps(holdings_by_bucket)

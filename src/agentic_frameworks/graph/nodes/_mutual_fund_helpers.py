@@ -295,3 +295,17 @@ def _compute_redundancy_correlations(fund_histories: dict[str, list[dict]]) -> d
             result[isin_a][isin_b] = correlation
             result[isin_b][isin_a] = correlation
     return result
+
+
+def _compute_mf_category_gaps(holdings_by_bucket: dict[str, dict[str, list[dict]]]) -> list[str]:
+    """Live-compute curated MF categories with zero coverage in real IN mutual fund holdings.
+
+    Mirrors _compute_us_gaps/_compute_india_equity_gaps: any category
+    string not in MF_CATEGORY_TO_TAXONOMY raises - fail loud rather
+    than silently miscounting.
+    """
+    covered: set[str] = set()
+    for holding in holdings_by_bucket.get("mutual_fund", {}).get("IN", []):
+        category = holding["sector"]
+        covered.add(MF_CATEGORY_TO_TAXONOMY[category])
+    return [category for category in MF_CATEGORY_TAXONOMY if category not in covered]
