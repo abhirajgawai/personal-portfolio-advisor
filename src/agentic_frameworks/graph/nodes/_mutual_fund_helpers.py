@@ -199,3 +199,62 @@ def _compute_fund_metrics(history: list[dict]) -> dict:
         "volatility": volatility,
         "max_drawdown": max_drawdown,
     }
+
+
+def _parse_yfinance_price_history(text: str) -> list[dict]:
+    """Parse yfinance_get_price_history's markdown table output.
+
+    Confirmed live this session: this tool returns a markdown table
+    (Date|Open|High|Low|Close|Volume|Dividends|Stock Splits), not JSON
+    like yfinance_get_ticker_info - a real API-shape difference this
+    parser exists specifically to handle.
+    """
+    lines = [line for line in text.strip().split("\n") if line.strip()]
+    data_lines = lines[2:]  # skip header + markdown separator row
+    parsed = []
+    for line in data_lines:
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        date_str = cells[0].split(" ")[0]
+        parsed.append({"date": date.fromisoformat(date_str), "close": float(cells[4])})
+    return parsed
+
+
+async def _compute_benchmark_difference(
+    nav_history: list[dict], benchmark_ticker: str | None, yfinance_toolset
+) -> dict | None:
+    """Compare a fund's own CAGR against its benchmark's CAGR over the same period.
+
+    Returns None (not a fabricated number) when no verified benchmark
+    ticker exists for this fund's category - a real, disclosed
+    limitation, not a silently skipped check.
+    """
+    if benchmark_ticker is None:
+        return None
+
+    fund_metrics = _compute_fund_metrics(nav_history)
+    years = fund_metrics["track_record_years"]
+
+    raw = await yfinance_toolset.wrapped.direct_call_tool(
+        "yfinance_get_price_history", {"symbol": benchmark_ticker, "period": "max", "interval": "1mo"}
+    )
+    benchmark_history = _parse_yfinance_price_history(raw)
+
+    start_date = nav_history[0]["date"]
+    end_date = nav_history[-1]["date"]
+    benchmark_start = _find_nav_on_or_before(
+        [{"date": h["date"], "nav": h["close"]} for h in benchmark_history], start_date
+    )
+    benchmark_end = _find_nav_on_or_before(
+        [{"date": h["date"], "nav": h["close"]} for h in benchmark_history], end_date
+    )
+    if benchmark_start is None or benchmark_end is None or years <= 0:
+        return None
+
+    benchmark_cagr = (benchmark_end["nav"] / benchmark_start["nav"]) ** (1 / years) - 1
+    fund_cagr = fund_metrics["cagr_since_inception"]
+
+    return {
+        "fund_cagr": fund_cagr,
+        "benchmark_cagr": benchmark_cagr,
+        "difference": fund_cagr - benchmark_cagr,
+    }

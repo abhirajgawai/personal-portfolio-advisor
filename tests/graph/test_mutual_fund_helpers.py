@@ -184,3 +184,58 @@ def test_compute_fund_metrics_returns_none_volatility_for_insufficient_history()
     metrics = _compute_fund_metrics(history)
 
     assert metrics["volatility"] is None
+
+
+def test_parse_yfinance_price_history_extracts_date_and_close():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _parse_yfinance_price_history,
+    )
+
+    raw = (
+        "| Date                      |    Open |    High |     Low |   Close |   Volume |   Dividends |   Stock Splits |\n"
+        "|:--------------------------|--------:|--------:|--------:|--------:|---------:|------------:|---------------:|\n"
+        "| 2026-07-01 00:00:00+05:30 | 76545.2 | 78664.9 | 75474.4 | 78094.6 |   430400 |           0 |              0 |\n"
+        "| 2026-08-01 00:00:00+05:30 | 78883.3 | 79143.1 | 76751.3 | 76957.3 |   319600 |           0 |              0 |"
+    )
+
+    parsed = _parse_yfinance_price_history(raw)
+
+    assert parsed == [
+        {"date": date(2026, 7, 1), "close": 78094.6},
+        {"date": date(2026, 8, 1), "close": 76957.3},
+    ]
+
+
+async def test_compute_benchmark_difference_returns_none_when_ticker_unavailable():
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_benchmark_difference,
+    )
+
+    result = await _compute_benchmark_difference([], None, None)
+
+    assert result is None
+
+
+async def test_compute_benchmark_difference_computes_real_comparison():
+    from datetime import date
+
+    from agentic_frameworks.graph.mcp_clients import get_yfinance_toolset
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
+        _compute_benchmark_difference,
+    )
+
+    fund_history = [
+        {"date": date(2023, 1, 1), "nav": 100.0},
+        {"date": date(2026, 1, 1), "nav": 130.0},
+    ]
+
+    toolset = get_yfinance_toolset()
+    async with toolset:
+        result = await _compute_benchmark_difference(fund_history, "^NSEI", toolset)
+
+    assert result is not None
+    assert "fund_cagr" in result
+    assert "benchmark_cagr" in result
+    assert "difference" in result
