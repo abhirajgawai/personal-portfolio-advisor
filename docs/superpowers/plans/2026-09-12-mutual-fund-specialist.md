@@ -729,7 +729,7 @@ git commit -m "feat: add chronological NAV history fetching"
 
 **Interfaces:**
 - Consumes: NAV history shape from Task 5 (`list[{"date": date, "nav": float}]`).
-- Produces: `_resample_month_end(history: list[dict]) -> list[dict]`, `_compute_fund_metrics(history: list[dict]) -> dict` (keys: `track_record_years`, `cagr_1y`, `cagr_3y`, `cagr_since_inception`, `volatility`, `max_drawdown`) — pure, no LLM, no MCP call. Consumed by Task 12/13's nodes and Task 8's redundancy computation.
+- Produces: `_resample_month_end(history: list[dict]) -> list[dict]`, `_compute_fund_metrics(history: list[dict]) -> dict` (keys: `track_record_years: float`, `cagr_1y: float | None`, `cagr_3y: float | None`, `cagr_since_inception: float | None` (`None` when `track_record_years <= 0` — a single-entry or same-day history, CAGR is mathematically undefined, never fabricated as `0.0`), `volatility: float | None` (`None` when fewer than 2 monthly return observations exist — never fabricated as `0.0`, which would misleadingly read as "confirmed stable"), `max_drawdown: float`) — pure, no LLM, no MCP call. Consumed by Task 12/13's nodes and Task 8's redundancy computation. Task 12's `_format_metrics_for_prompt` already guards both nullable fields with an `is not None` check, matching the existing `cagr_1y`/`cagr_3y` pattern.
 
 - [ ] **Step 1: Write failing tests with a synthetic, hand-computable NAV series**
 
@@ -1580,10 +1580,10 @@ def _lookup_benchmark_ticker(isin: str, category: str) -> str | None:
 def _format_metrics_for_prompt(metrics: dict, benchmark: dict | None, redundancy: dict[str, float]) -> str:
     lines = [
         f"Track record: {metrics['track_record_years']} years",
-        f"CAGR since inception: {metrics['cagr_since_inception']:.1%}",
+        f"CAGR since inception: {metrics['cagr_since_inception']:.1%}" if metrics["cagr_since_inception"] is not None else "CAGR since inception: undefined (insufficient history)",
         f"CAGR 1yr: {metrics['cagr_1y']:.1%}" if metrics["cagr_1y"] is not None else "CAGR 1yr: insufficient history",
         f"CAGR 3yr: {metrics['cagr_3y']:.1%}" if metrics["cagr_3y"] is not None else "CAGR 3yr: insufficient history",
-        f"Annualized volatility: {metrics['volatility']:.1%}",
+        f"Annualized volatility: {metrics['volatility']:.1%}" if metrics["volatility"] is not None else "Annualized volatility: undefined (insufficient history)",
         f"Max drawdown: {metrics['max_drawdown']:.1%}",
     ]
     if benchmark is not None:
