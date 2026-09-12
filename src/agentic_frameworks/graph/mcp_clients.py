@@ -7,6 +7,8 @@ it must be launched as a subprocess speaking MCP over stdio.
 
 from __future__ import annotations
 
+import sys
+
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic_ai.mcp import FastMCPClient, MCPToolset, StdioTransport
 from pydantic_ai.toolsets.filtered import FilteredToolset
@@ -74,3 +76,21 @@ def get_yfinance_toolset() -> FilteredToolset:
     client = FastMCPClient(transport)
     toolset = MCPToolset(client, tool_error_behavior="retry")
     return toolset.filtered(lambda ctx, tool_def: tool_def.name not in _EXCLUDED_TOOLS)
+
+
+def get_mfapi_toolset() -> MCPToolset:
+    """Build the toolset for this project's own custom mfapi_mcp server.
+
+    Launched via `sys.executable -m agentic_frameworks.mfapi_mcp.server` -
+    in this project's own venv, since this server is code we wrote
+    ourselves (unlike portfolio_data_mcp, a sibling project, or
+    yfinance-mcp, an external package launched via uvx).
+
+    tool_error_behavior="retry" from the start - Phase 5's lesson
+    (a malformed tool call should let the model self-correct via
+    ModelRetry, not crash the node with a raw ToolError) applied
+    proactively here rather than re-learned.
+    """
+    transport = StdioTransport(command=sys.executable, args=["-m", "agentic_frameworks.mfapi_mcp.server"])
+    client = FastMCPClient(transport)
+    return MCPToolset(client, tool_error_behavior="retry")
