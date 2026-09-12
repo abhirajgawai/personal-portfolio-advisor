@@ -147,9 +147,13 @@ def _compute_fund_metrics(history: list[dict]) -> dict:
 
     Returns raw numbers only, mirroring the Risk Analyst's measure-not-
     judge pattern: track_record_years, cagr_1y/cagr_3y (None if the
-    fund's history doesn't span that period), cagr_since_inception,
-    volatility (annualized stdev of monthly returns), max_drawdown
-    (a non-positive fraction, e.g. -0.4 for a 40% peak-to-trough decline).
+    fund's history doesn't span that period), cagr_since_inception
+    (float | None - None only when track_record_years <= 0, i.e. a
+    single-NAV-entry or same-day history where CAGR is mathematically
+    undefined), volatility (float | None - annualized stdev of monthly
+    returns, None only when fewer than 2 monthly return observations
+    exist), max_drawdown (a non-positive fraction, e.g. -0.4 for a 40%
+    peak-to-trough decline).
     """
     latest = history[-1]
     oldest = history[0]
@@ -167,7 +171,7 @@ def _compute_fund_metrics(history: list[dict]) -> dict:
     cagr_since_inception = (
         (latest["nav"] / oldest["nav"]) ** (1 / track_record_years) - 1
         if track_record_years > 0
-        else 0.0
+        else None
     )
 
     monthly = _resample_month_end(history)
@@ -176,7 +180,9 @@ def _compute_fund_metrics(history: list[dict]) -> dict:
         for i in range(1, len(monthly))
         if monthly[i - 1]["nav"] > 0
     ]
-    volatility = statistics.stdev(monthly_returns) * (12 ** 0.5) if len(monthly_returns) >= 2 else 0.0
+    volatility = (
+        statistics.stdev(monthly_returns) * (12 ** 0.5) if len(monthly_returns) >= 2 else None
+    )
 
     peak = history[0]["nav"]
     max_drawdown = 0.0

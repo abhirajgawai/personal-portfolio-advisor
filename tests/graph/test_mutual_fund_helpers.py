@@ -154,3 +154,33 @@ def test_compute_fund_metrics_returns_none_cagr_when_period_exceeds_history():
     metrics = _compute_fund_metrics(history)
 
     assert metrics["cagr_3y"] is None
+
+
+def test_compute_fund_metrics_returns_none_cagr_since_inception_for_single_entry_history():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _compute_fund_metrics
+
+    history = [{"date": date(2026, 1, 1), "nav": 100.0}]
+
+    metrics = _compute_fund_metrics(history)
+
+    assert metrics["cagr_since_inception"] is None
+
+
+def test_compute_fund_metrics_returns_none_volatility_for_insufficient_history():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _compute_fund_metrics
+
+    # Only spans part of one month - _resample_month_end will produce
+    # at most 1 monthly entry, so there are fewer than 2 monthly
+    # returns to compute a standard deviation from.
+    history = [
+        {"date": date(2026, 1, 5), "nav": 100.0},
+        {"date": date(2026, 1, 15), "nav": 102.0},
+    ]
+
+    metrics = _compute_fund_metrics(history)
+
+    assert metrics["volatility"] is None
