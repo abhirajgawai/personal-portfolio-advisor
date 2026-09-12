@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime
+import statistics
+from datetime import date, datetime, timedelta
 
 from agentic_frameworks.graph.schemas import MF_CATEGORY_TAXONOMY
 
@@ -119,3 +120,76 @@ async def _fetch_nav_history(scheme_code: int, toolset) -> list[dict]:
         for entry in raw["data"]
     ]
     return sorted(history, key=lambda h: h["date"])
+
+
+def _resample_month_end(history: list[dict]) -> list[dict]:
+    """Pick the last NAV entry on/before each month boundary present in the series.
+
+    history must already be sorted ascending by date (as _fetch_nav_history
+    returns it). Used for volatility and cross-fund correlation, so both
+    are computed on a consistent, lower-noise monthly cadence rather than
+    raw daily NAV entries.
+    """
+    by_month: dict[tuple[int, int], dict] = {}
+    for entry in history:
+        key = (entry["date"].year, entry["date"].month)
+        by_month[key] = entry
+    return [by_month[key] for key in sorted(by_month.keys())]
+
+
+def _find_nav_on_or_before(history: list[dict], target_date) -> dict | None:
+    candidates = [h for h in history if h["date"] <= target_date]
+    return candidates[-1] if candidates else None
+
+
+def _compute_fund_metrics(history: list[dict]) -> dict:
+    """Pure computation from real NAV history - no LLM, no fabrication.
+
+    Returns raw numbers only, mirroring the Risk Analyst's measure-not-
+    judge pattern: track_record_years, cagr_1y/cagr_3y (None if the
+    fund's history doesn't span that period), cagr_since_inception,
+    volatility (annualized stdev of monthly returns), max_drawdown
+    (a non-positive fraction, e.g. -0.4 for a 40% peak-to-trough decline).
+    """
+    latest = history[-1]
+    oldest = history[0]
+    track_record_years = (latest["date"] - oldest["date"]).days / 365.25
+
+    def cagr_over_years(years: float) -> float | None:
+        target_date = latest["date"] - timedelta(days=int(years * 365.25))
+        if target_date < oldest["date"]:
+            return None
+        start = _find_nav_on_or_before(history, target_date)
+        if start is None or start["nav"] <= 0:
+            return None
+        return (latest["nav"] / start["nav"]) ** (1 / years) - 1
+
+    cagr_since_inception = (
+        (latest["nav"] / oldest["nav"]) ** (1 / track_record_years) - 1
+        if track_record_years > 0
+        else 0.0
+    )
+
+    monthly = _resample_month_end(history)
+    monthly_returns = [
+        (monthly[i]["nav"] / monthly[i - 1]["nav"]) - 1
+        for i in range(1, len(monthly))
+        if monthly[i - 1]["nav"] > 0
+    ]
+    volatility = statistics.stdev(monthly_returns) * (12 ** 0.5) if len(monthly_returns) >= 2 else 0.0
+
+    peak = history[0]["nav"]
+    max_drawdown = 0.0
+    for entry in history:
+        peak = max(peak, entry["nav"])
+        drawdown = (entry["nav"] - peak) / peak
+        max_drawdown = min(max_drawdown, drawdown)
+
+    return {
+        "track_record_years": round(track_record_years, 2),
+        "cagr_1y": cagr_over_years(1),
+        "cagr_3y": cagr_over_years(3),
+        "cagr_since_inception": cagr_since_inception,
+        "volatility": volatility,
+        "max_drawdown": max_drawdown,
+    }

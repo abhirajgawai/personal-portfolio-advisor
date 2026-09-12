@@ -99,3 +99,58 @@ async def test_fetch_nav_history_returns_chronological_real_data():
     assert all(isinstance(h["nav"], float) for h in history)
     assert history[0]["date"] < history[-1]["date"]
     assert history[0]["date"] == date(2013, 5, 28)
+
+
+def test_compute_fund_metrics_on_synthetic_series():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _compute_fund_metrics
+
+    # Exactly 2 years, NAV doubles from 100 to 200 - CAGR should be
+    # sqrt(2) - 1 ~= 41.42%. No drawdown (monotonic increase).
+    history = [
+        {"date": date(2024, 1, 1), "nav": 100.0},
+        {"date": date(2024, 7, 1), "nav": 130.0},
+        {"date": date(2025, 1, 1), "nav": 150.0},
+        {"date": date(2025, 7, 1), "nav": 170.0},
+        {"date": date(2026, 1, 1), "nav": 200.0},
+    ]
+
+    metrics = _compute_fund_metrics(history)
+
+    assert metrics["track_record_years"] == 2.0
+    assert abs(metrics["cagr_since_inception"] - (2 ** 0.5 - 1)) < 0.01
+    assert metrics["cagr_1y"] is not None
+    assert metrics["max_drawdown"] == 0.0
+
+
+def test_compute_fund_metrics_detects_a_real_drawdown():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _compute_fund_metrics
+
+    history = [
+        {"date": date(2024, 1, 1), "nav": 100.0},
+        {"date": date(2024, 6, 1), "nav": 150.0},
+        {"date": date(2024, 9, 1), "nav": 90.0},
+        {"date": date(2025, 1, 1), "nav": 120.0},
+    ]
+
+    metrics = _compute_fund_metrics(history)
+
+    assert abs(metrics["max_drawdown"] - (90.0 / 150.0 - 1)) < 0.001
+
+
+def test_compute_fund_metrics_returns_none_cagr_when_period_exceeds_history():
+    from datetime import date
+
+    from agentic_frameworks.graph.nodes._mutual_fund_helpers import _compute_fund_metrics
+
+    history = [
+        {"date": date(2025, 1, 1), "nav": 100.0},
+        {"date": date(2025, 6, 1), "nav": 110.0},
+    ]
+
+    metrics = _compute_fund_metrics(history)
+
+    assert metrics["cagr_3y"] is None
