@@ -208,3 +208,235 @@ def test_proposed_fund_candidate_rejects_unknown_category():
 
     with pytest.raises(ValidationError):
         ProposedFundCandidate(scheme_name="Some Fund", category="Not A Real Category")
+
+
+# --- SynthesizedRecommendation / AdvisorReport / HumanApproval (Phase 8) ---
+
+
+def _synthesized_holding_guidance(**overrides):
+    from agentic_frameworks.graph.schemas import SynthesizedHoldingGuidance
+
+    defaults = dict(
+        identifier="INF179K01WN9",
+        action="Hold",
+        rationale="Beats its benchmark modestly, short track record.",
+        risk_flags=["short_track_record"],
+        confidence=0.6,
+    )
+    defaults.update(overrides)
+    return SynthesizedHoldingGuidance(**defaults)
+
+
+def _synthesized_new_buy(**overrides):
+    from agentic_frameworks.graph.schemas import SynthesizedNewBuy
+
+    defaults = dict(
+        identifier="XLV",
+        rationale="Fills the Health Care gap.",
+        gap_addressed="Health Care",
+        position_size_pct_of_portfolio=1.5,
+        entry_approach="Staggered",
+        suggested_platform="moomoo",
+        risk_flags=[],
+        confidence=0.7,
+    )
+    defaults.update(overrides)
+    return SynthesizedNewBuy(**defaults)
+
+
+def test_synthesized_recommendation_empty_new_buys_with_reason_validates():
+    from agentic_frameworks.graph.schemas import SynthesizedRecommendation
+
+    recommendation = SynthesizedRecommendation(
+        portfolio_assessment="Diversified but real-estate heavy.",
+        allocation_notes=["Real estate is 34% of the portfolio."],
+        existing_holdings_guidance=[_synthesized_holding_guidance()],
+        new_buy_suggestions=[],
+        no_new_buy_reason="No candidate cleared the Conviction Gate this cycle.",
+    )
+
+    assert recommendation.new_buy_suggestions == []
+    assert recommendation.no_new_buy_reason is not None
+
+
+def test_synthesized_recommendation_empty_new_buys_with_none_reason_fails():
+    from agentic_frameworks.graph.schemas import SynthesizedRecommendation
+
+    with pytest.raises(ValidationError):
+        SynthesizedRecommendation(
+            portfolio_assessment="Diversified but real-estate heavy.",
+            allocation_notes=[],
+            existing_holdings_guidance=[],
+            new_buy_suggestions=[],
+            no_new_buy_reason=None,
+        )
+
+
+def test_synthesized_recommendation_nonempty_new_buys_with_reason_fails():
+    from agentic_frameworks.graph.schemas import SynthesizedRecommendation
+
+    with pytest.raises(ValidationError):
+        SynthesizedRecommendation(
+            portfolio_assessment="Diversified but real-estate heavy.",
+            allocation_notes=[],
+            existing_holdings_guidance=[],
+            new_buy_suggestions=[_synthesized_new_buy()],
+            no_new_buy_reason="This should not be set alongside a non-empty list.",
+        )
+
+
+def test_synthesized_new_buy_rejects_position_size_over_cap():
+    from agentic_frameworks.graph.schemas import MAX_NEW_POSITION_PCT
+
+    with pytest.raises(ValidationError):
+        _synthesized_new_buy(position_size_pct_of_portfolio=MAX_NEW_POSITION_PCT + 0.5)
+
+
+def test_synthesized_new_buy_rejects_zero_or_negative_position_size():
+    with pytest.raises(ValidationError):
+        _synthesized_new_buy(position_size_pct_of_portfolio=0.0)
+
+
+def test_synthesized_recommendation_enforces_max_new_buy_suggestions_cap():
+    from agentic_frameworks.graph.schemas import MAX_NEW_BUY_SUGGESTIONS, SynthesizedRecommendation
+
+    with pytest.raises(ValidationError):
+        SynthesizedRecommendation(
+            portfolio_assessment="x",
+            allocation_notes=[],
+            existing_holdings_guidance=[],
+            new_buy_suggestions=[
+                _synthesized_new_buy(identifier=f"T{i}") for i in range(MAX_NEW_BUY_SUGGESTIONS + 1)
+            ],
+            no_new_buy_reason=None,
+        )
+
+
+def test_synthesized_recommendation_has_no_identity_fields():
+    """Structural half of the identity guarantee (design spec Architecture
+    point 3): the LLM's output_type must never be able to name a
+    display_name/identifier_kind - those are always re-bound in code."""
+    from agentic_frameworks.graph.schemas import (
+        SynthesizedHoldingGuidance,
+        SynthesizedNewBuy,
+        SynthesizedRecommendation,
+    )
+
+    assert "display_name" not in SynthesizedRecommendation.model_fields
+    assert "identifier_kind" not in SynthesizedRecommendation.model_fields
+    assert "display_name" not in SynthesizedHoldingGuidance.model_fields
+    assert "identifier_kind" not in SynthesizedHoldingGuidance.model_fields
+    assert "display_name" not in SynthesizedNewBuy.model_fields
+    assert "identifier_kind" not in SynthesizedNewBuy.model_fields
+    assert "specialist" not in SynthesizedNewBuy.model_fields
+
+
+def test_advisor_report_from_synthesis_binds_identity_from_subject_index():
+    from agentic_frameworks.graph.schemas import (
+        AdvisorReport,
+        ReportCoverage,
+        SynthesizedRecommendation,
+    )
+
+    synthesis = SynthesizedRecommendation(
+        portfolio_assessment="Diversified but real-estate heavy.",
+        allocation_notes=["Real estate is 34% of the portfolio."],
+        existing_holdings_guidance=[_synthesized_holding_guidance()],
+        new_buy_suggestions=[_synthesized_new_buy()],
+        no_new_buy_reason=None,
+    )
+    subject_index = {
+        "INF179K01WN9": (
+            "isin",
+            "HDFC BSE Sensex Index Fund - Direct Plan - Growth Option",
+            "existing",
+            None,
+        ),
+        "XLV": ("ticker", "Health Care Select Sector SPDR Fund", "new_buy", "us_equity"),
+    }
+    coverage = ReportCoverage(
+        holdings_total=54,
+        holdings_individually_assessed=9,
+        unassessed_buckets=["equity/IN", "equity/US"],
+        coverage_note="9 of 54 holdings individually assessed.",
+    )
+
+    report = AdvisorReport.from_synthesis(synthesis, subject_index=subject_index, coverage=coverage)
+
+    assert report.existing_holdings_guidance[0].display_name == (
+        "HDFC BSE Sensex Index Fund - Direct Plan - Growth Option"
+    )
+    assert report.existing_holdings_guidance[0].identifier_kind == "isin"
+    assert report.new_buy_suggestions[0].display_name == "Health Care Select Sector SPDR Fund"
+    assert report.new_buy_suggestions[0].identifier_kind == "ticker"
+    assert report.new_buy_suggestions[0].specialist == "us_equity"
+    assert report.coverage.holdings_total == 54
+    assert report.schema_version == 1
+    assert report.generated_at
+
+
+def test_human_approval_rejects_extra_keys():
+    from agentic_frameworks.graph.schemas import HumanApproval
+
+    with pytest.raises(ValidationError):
+        HumanApproval(
+            decision="approved",
+            approved_by="abhi",
+            excluded_identifiers=[],
+            note=None,
+            decided_at="2026-09-19T00:00:00+00:00",
+            extra_field="not allowed",
+        )
+
+
+def test_human_approval_rejects_empty_approved_by():
+    from agentic_frameworks.graph.schemas import HumanApproval
+
+    with pytest.raises(ValidationError):
+        HumanApproval(
+            decision="approved",
+            approved_by="",
+            excluded_identifiers=[],
+            note=None,
+            decided_at="2026-09-19T00:00:00+00:00",
+        )
+
+
+def test_human_approval_rejects_missing_approved_by():
+    from agentic_frameworks.graph.schemas import HumanApproval
+
+    with pytest.raises(ValidationError):
+        HumanApproval(
+            decision="approved",
+            excluded_identifiers=[],
+            note=None,
+            decided_at="2026-09-19T00:00:00+00:00",
+        )
+
+
+def test_human_approval_rejects_unknown_decision():
+    from agentic_frameworks.graph.schemas import HumanApproval
+
+    with pytest.raises(ValidationError):
+        HumanApproval(
+            decision="maybe",
+            approved_by="abhi",
+            excluded_identifiers=[],
+            note=None,
+            decided_at="2026-09-19T00:00:00+00:00",
+        )
+
+
+def test_human_approval_accepts_valid_approval():
+    from agentic_frameworks.graph.schemas import HumanApproval
+
+    approval = HumanApproval(
+        decision="approved_with_exclusions",
+        approved_by="abhi",
+        excluded_identifiers=["XLV"],
+        note="Skipping XLV for now.",
+        decided_at="2026-09-19T00:00:00+00:00",
+    )
+
+    assert approval.decision == "approved_with_exclusions"
+    assert approval.excluded_identifiers == ["XLV"]

@@ -38,6 +38,22 @@ def test_specialist_state_has_expected_keys():
     assert hints["mutual_fund_candidates"] == list[dict]
 
 
+def test_synthesizer_state_has_expected_keys():
+    from agentic_frameworks.graph.state import SynthesizerState
+
+    hints = get_type_hints(SynthesizerState)
+    assert set(hints.keys()) == {"recommendation"}
+    assert hints["recommendation"] is dict
+
+
+def test_approval_state_has_expected_keys():
+    from agentic_frameworks.graph.state import ApprovalState
+
+    hints = get_type_hints(ApprovalState)
+    assert set(hints.keys()) == {"approval"}
+    assert hints["approval"] is dict
+
+
 def test_graph_state_has_expected_keys():
     from agentic_frameworks.graph.state import GraphState
 
@@ -54,6 +70,8 @@ def test_graph_state_has_expected_keys():
         "india_equity_candidates",
         "existing_fund_evaluations",
         "mutual_fund_candidates",
+        "recommendation",
+        "approval",
     }
 
 

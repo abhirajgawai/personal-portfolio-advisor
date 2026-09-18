@@ -38,3 +38,34 @@ def get_specialist_model() -> FallbackModel:
     primary = OpenRouterModel(SPECIALIST_MODEL_NAME, provider=provider)
     backup = OpenRouterModel(BACKUP_MODEL_NAME, provider=provider)
     return FallbackModel(primary, backup)
+
+
+# Synthesizer's own, separately-chosen model list (never inherited from the
+# specialists' FallbackModel by convenience - CLAUDE.md cost control rule
+# 1). See docs/superpowers/specs/2026-09-19-synthesizer-design.md "Model
+# Choice" and "Decisions" #1: the Synthesizer reconciles already-tool-
+# grounded specialist judgments rather than doing primary research, so a
+# free-first chain is proposed and accepted (2026-09-19 autonomous session,
+# reversible, logged for review) rather than the specialists' paid primary.
+SYNTHESIZER_MODEL_NAME = "nvidia/nemotron-3-super-120b-a12b:free"
+SYNTHESIZER_BACKUP_MODEL_NAME = "deepseek/deepseek-v4-flash-0731:free"
+SYNTHESIZER_PAID_TAIL_MODEL_NAME = "z-ai/glm-5.3-flash"
+
+
+def get_synthesizer_model() -> FallbackModel:
+    """Build the OpenRouter-backed model used by the Synthesizer node.
+
+    Three-model FallbackModel chain, tried in order on a real API error
+    (ModelAPIError, e.g. a 429 from an overloaded free pool - same pattern
+    Phase 4 proved live): SYNTHESIZER_MODEL_NAME (free) ->
+    SYNTHESIZER_BACKUP_MODEL_NAME (free) -> SYNTHESIZER_PAID_TAIL_MODEL_NAME
+    (cheap paid tail, so a free-pool outage degrades the run instead of
+    killing it). Not a silent default: the model list and the tradeoff it
+    accepts are documented in the design spec's Model Choice section.
+    """
+    api_key = os.environ["OPENROUTER_API_KEY"]
+    provider = OpenRouterProvider(api_key=api_key)
+    primary = OpenRouterModel(SYNTHESIZER_MODEL_NAME, provider=provider)
+    backup = OpenRouterModel(SYNTHESIZER_BACKUP_MODEL_NAME, provider=provider)
+    paid_tail = OpenRouterModel(SYNTHESIZER_PAID_TAIL_MODEL_NAME, provider=provider)
+    return FallbackModel(primary, backup, paid_tail)

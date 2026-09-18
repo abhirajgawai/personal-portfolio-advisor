@@ -67,6 +67,28 @@ class SpecialistState(TypedDict):
     mutual_fund_candidates: list[dict]
 
 
+class SynthesizerState(TypedDict):
+    """State the Synthesizer node produces.
+
+    recommendation: an `AdvisorReport` dict (schemas.AdvisorReport.
+        model_dump()) - identity already re-bound in code, never a raw
+        SynthesizedRecommendation (the LLM's identity-poor output_type).
+    """
+
+    recommendation: dict
+
+
+class ApprovalState(TypedDict):
+    """State the human-approval-gate node produces.
+
+    approval: a `HumanApproval` dict (schemas.HumanApproval.model_dump()) -
+        the validated resume payload a human supplied via LangGraph's
+        resume-command primitive, invoked from outside the graph.
+    """
+
+    approval: dict
+
+
 class GraphState(TypedDict):
     """Combined state for the compiled graph - union of every node's output.
 
@@ -99,6 +121,11 @@ class GraphState(TypedDict):
         the real 9 existing IN mutual fund holdings, each a `CandidateEvaluation` dict.
     mutual_fund_candidates: the Mutual Fund Specialist's evaluated new-buy candidates,
         each a `CandidateEvaluation` dict.
+    recommendation: the Synthesizer's `AdvisorReport` dict (see
+        SynthesizerState) - the graph's one, reconciled, two-sided report.
+    approval: the human-approval-gate's `HumanApproval` dict (see
+        ApprovalState) - only present on runs that actually required
+        approval (a Hold-only, no-new-buy run never reaches that node).
     """
 
     holdings: list[dict]
@@ -112,3 +139,5 @@ class GraphState(TypedDict):
     india_equity_candidates: list[dict]
     existing_fund_evaluations: list[dict]
     mutual_fund_candidates: list[dict]
+    recommendation: dict
+    approval: dict
