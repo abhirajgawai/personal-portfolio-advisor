@@ -23,7 +23,7 @@ from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
     _fetch_nav_history,
     _resolve_scheme_code,
 )
-from agentic_frameworks.graph.schemas import CandidateEvaluation
+from agentic_frameworks.graph.schemas import CandidateEvaluation, ConvictionVerdict
 from agentic_frameworks.graph.state import GraphState, SpecialistState
 
 
@@ -113,10 +113,14 @@ recommendation for the user to act on manually."""
 
 
 def _build_conviction_gate_evaluator(model, toolset: FilteredToolset) -> Agent:
-    """retries=2: bounded per CLAUDE.md's LLM cost control rule 6."""
+    """retries=2: bounded per CLAUDE.md's LLM cost control rule 6.
+    output_type=ConvictionVerdict: judgment only - the node binds each
+    verdict to the holding's real ISIN and name from portfolio.db, so
+    the model is never in a position to mislabel which fund it judged.
+    """
     return Agent(
         model,
-        output_type=CandidateEvaluation,
+        output_type=ConvictionVerdict,
         system_prompt=_CONVICTION_GATE_SYSTEM_PROMPT,
         toolsets=[toolset],
         retries=2,
@@ -161,6 +165,13 @@ async def mutual_fund_holdings_analyzer_node(state: GraphState) -> SpecialistSta
             eval_result = await evaluator.run(
                 f"Evaluate existing holding: {holding['name']} (category: {category}).\n{metrics_text}"
             )
-            evaluations.append(eval_result.output.model_dump())
+            evaluations.append(
+                CandidateEvaluation.from_verdict(
+                    eval_result.output,
+                    identifier=isin,
+                    identifier_kind="isin",
+                    display_name=holding["name"],
+                ).model_dump()
+            )
 
     return {"existing_fund_evaluations": evaluations}

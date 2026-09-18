@@ -7,6 +7,7 @@ name = "agentic-frameworks"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiosqlite" },
     { name = "langchain-mcp-adapters" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
@@ -23,6 +24,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.21.0" },
     { name = "langchain-mcp-adapters", specifier = ">=0.3.2" },
     { name = "langgraph", specifier = ">=1.2.11" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.1.1" },

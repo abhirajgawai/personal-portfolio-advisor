@@ -67,3 +67,20 @@ async def test_mutual_fund_holdings_analyzer_node_returns_one_evaluation_per_rea
     assert len(result["existing_fund_evaluations"]) == 9
     for evaluation in result["existing_fund_evaluations"]:
         assert evaluation["action"] in {"Buy", "Hold", "Sell", "Reduce"}
+
+    # Every verdict is bound to the real ISIN and name of the holding it
+    # judged (portfolio.db's ticker/name columns for IN mutual funds),
+    # one-to-one with the real 9 holdings - no reliance on list order.
+    holdings = research_result["holdings_by_bucket"]["mutual_fund"]["IN"]
+    expected = {holding["ticker"]: holding["name"] for holding in holdings}
+    identified = {
+        evaluation["identifier"]: evaluation["display_name"]
+        for evaluation in result["existing_fund_evaluations"]
+    }
+
+    assert identified == expected
+    assert all(
+        evaluation["identifier_kind"] == "isin"
+        for evaluation in result["existing_fund_evaluations"]
+    )
+    assert all(identifier.startswith("INF") for identifier in identified)

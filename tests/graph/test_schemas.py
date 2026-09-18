@@ -10,6 +10,9 @@ def test_candidate_evaluation_accepts_valid_data():
     from agentic_frameworks.graph.schemas import CandidateEvaluation
 
     evaluation = CandidateEvaluation(
+        identifier="XOM",
+        identifier_kind="ticker",
+        display_name="Exxon Mobil Corporation",
         action="Buy",
         confidence=0.8,
         reasoning="Fills the Energy gap with strong fundamentals.",
@@ -20,6 +23,7 @@ def test_candidate_evaluation_accepts_valid_data():
 
     assert evaluation.action == "Buy"
     assert evaluation.confidence == 0.8
+    assert evaluation.identifier == "XOM"
 
 
 def test_candidate_evaluation_rejects_invalid_action():
@@ -27,6 +31,9 @@ def test_candidate_evaluation_rejects_invalid_action():
 
     with pytest.raises(ValidationError):
         CandidateEvaluation(
+            identifier="XOM",
+            identifier_kind="ticker",
+            display_name="Exxon Mobil Corporation",
             action="Speculate",
             confidence=0.8,
             reasoning="not a real action",
@@ -41,6 +48,9 @@ def test_candidate_evaluation_rejects_out_of_range_confidence():
 
     with pytest.raises(ValidationError):
         CandidateEvaluation(
+            identifier="XOM",
+            identifier_kind="ticker",
+            display_name="Exxon Mobil Corporation",
             action="Buy",
             confidence=7.0,
             reasoning="confidence should be a 0-1 probability, not 7.0",
@@ -48,6 +58,98 @@ def test_candidate_evaluation_rejects_out_of_range_confidence():
             entry_approach=None,
             suggested_platform=None,
         )
+
+
+def test_candidate_evaluation_requires_identity_fields():
+    """A verdict with no subject is the bug this schema change fixes:
+    identity must be impossible to omit, not merely conventional."""
+    from agentic_frameworks.graph.schemas import CandidateEvaluation
+
+    with pytest.raises(ValidationError):
+        CandidateEvaluation(
+            action="Buy",
+            confidence=0.8,
+            reasoning="no identifier - must not validate",
+            risk_flags=[],
+            entry_approach=None,
+            suggested_platform=None,
+        )
+
+
+def test_candidate_evaluation_rejects_unknown_identifier_kind():
+    from agentic_frameworks.graph.schemas import CandidateEvaluation
+
+    with pytest.raises(ValidationError):
+        CandidateEvaluation(
+            identifier="INF179K01WN9",
+            identifier_kind="folio_number",
+            display_name="Some Fund",
+            action="Hold",
+            confidence=0.5,
+            reasoning="folio_number is not one of the three real namespaces",
+            risk_flags=[],
+            entry_approach=None,
+            suggested_platform=None,
+        )
+
+
+def test_conviction_verdict_has_no_identity_fields():
+    """Structural guardrail: the LLM's output schema cannot name its own
+    subject, so it can never mislabel one."""
+    from agentic_frameworks.graph.schemas import ConvictionVerdict
+
+    assert "identifier" not in ConvictionVerdict.model_fields
+    assert "identifier_kind" not in ConvictionVerdict.model_fields
+    assert "display_name" not in ConvictionVerdict.model_fields
+
+    verdict = ConvictionVerdict(
+        action="Hold",
+        confidence=0.6,
+        reasoning="Judgment only, no subject.",
+        risk_flags=[],
+        entry_approach=None,
+        suggested_platform=None,
+    )
+
+    assert verdict.action == "Hold"
+
+
+def test_candidate_evaluation_from_verdict_binds_identity_to_judgment():
+    from agentic_frameworks.graph.schemas import CandidateEvaluation, ConvictionVerdict
+
+    verdict = ConvictionVerdict(
+        action="Buy",
+        confidence=0.72,
+        reasoning="Beats its benchmark with moderate drawdown.",
+        risk_flags=["short_track_record"],
+        entry_approach="Staggered",
+        suggested_platform="Groww",
+    )
+
+    evaluation = CandidateEvaluation.from_verdict(
+        verdict,
+        identifier="118632",
+        identifier_kind="scheme_code",
+        display_name="Nippon India Large Cap Fund - Direct Plan - Growth Option",
+    )
+
+    assert evaluation.identifier == "118632"
+    assert evaluation.identifier_kind == "scheme_code"
+    assert evaluation.display_name.startswith("Nippon India Large Cap Fund")
+    assert evaluation.action == "Buy"
+    assert evaluation.confidence == 0.72
+    assert evaluation.risk_flags == ["short_track_record"]
+    assert set(evaluation.model_dump()) == {
+        "identifier",
+        "identifier_kind",
+        "display_name",
+        "action",
+        "confidence",
+        "reasoning",
+        "risk_flags",
+        "entry_approach",
+        "suggested_platform",
+    }
 
 
 def test_proposed_candidate_requires_ticker_and_sector():

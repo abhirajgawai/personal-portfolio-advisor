@@ -6,11 +6,26 @@ evaluate). Fails loud, same as every other node.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from typing import Optional
+
+from langgraph.store.base import BaseStore
 from pydantic_ai import Agent
 from pydantic_ai.toolsets.filtered import FilteredToolset
 
 from agentic_frameworks.graph.mcp_clients import get_mfapi_toolset, get_yfinance_toolset
 from agentic_frameworks.graph.models import get_specialist_model
+from agentic_frameworks.graph.nodes._candidate_memory import (
+    MAX_EXCLUSION_HINTS,
+    REJECTED_MUTUAL_FUND_BY_NAME_NS,
+    REJECTED_MUTUAL_FUND_NS,
+    _cache_resolved_scheme,
+    _filter_previously_rejected,
+    _load_recent_rejections,
+    _load_resolved_scheme,
+    _normalize_scheme_name,
+    _record_rejection,
+)
 from agentic_frameworks.graph.nodes._mutual_fund_helpers import (
     MF_CATEGORY_BENCHMARK_TICKERS,
     _category_matches_taxonomy,
@@ -27,7 +42,12 @@ from agentic_frameworks.graph.nodes._specialist_helpers import (
 from agentic_frameworks.graph.nodes.mutual_fund_holdings_analyzer import (
     _format_metrics_for_prompt,
 )
-from agentic_frameworks.graph.schemas import CandidateEvaluation, ProposedFundCandidate
+from agentic_frameworks.graph.schemas import (
+    CandidateEvaluation,
+    ConvictionVerdict,
+    ProposedFundCandidate,
+    RejectedCandidate,
+)
 from agentic_frameworks.graph.state import GraphState, SpecialistState
 
 _CANDIDATE_GENERATOR_SYSTEM_PROMPT = """You are an India mutual fund research assistant for a personal \
@@ -114,21 +134,47 @@ def _build_conviction_gate_evaluator(
     evaluated in that run, so it stays one stable, cacheable string within
     a run (per CLAUDE.md's LLM cost control rule 3).
     retries=2: bounded per CLAUDE.md's LLM cost control rule 6.
+    output_type=ConvictionVerdict: judgment only - the node binds each
+    verdict to the MFapi-resolved, category-checked scheme code and its
+    real scheme name, so the model is never in a position to mislabel
+    which fund a verdict belongs to.
     """
     system_prompt = _NEW_BUY_CONVICTION_GATE_SYSTEM_PROMPT_TEMPLATE.format(
         holdings_summary=holdings_summary, gap_categories_text=gap_categories_text
     )
     return Agent(
         model,
-        output_type=CandidateEvaluation,
+        output_type=ConvictionVerdict,
         system_prompt=system_prompt,
         toolsets=[toolset],
         retries=2,
     )
 
 
-async def mutual_fund_specialist_node(state: GraphState) -> SpecialistState:
+async def mutual_fund_specialist_node(
+    state: GraphState, *, store: Optional[BaseStore] = None
+) -> SpecialistState:
     """Propose, verify, and evaluate new-buy mutual fund candidates.
+
+    `store` is injected by LangGraph via signature; a missing store
+    raises (see design spec's Error Handling, and the equity
+    specialists' identical guard). Rejection memory here is two-stage,
+    per the design spec: a cheap pre-cap filter on the normalized
+    proposed name (catches the common exact-repeat case for free) and
+    the authoritative post-resolution filter on the real `scheme_code`,
+    run just before the paid evaluator call. Both alias and canonical
+    rejection records are written on a non-Buy verdict.
+
+    Also caches the free-but-slow `_resolve_scheme_by_name_and_direct_
+    plan` name resolution in the `resolved_schemes/mutual_fund`
+    namespace, keyed by normalized proposed name (see design spec
+    Decision 3 - "cache the fund ISIN -> scheme_code resolution"; this
+    node has no ISIN for a not-yet-held candidate, so it caches the
+    resolution it actually performs, keyed by the input it actually
+    has). `mutual_fund_holdings_analyzer.py` (the node that resolves
+    EXISTING holdings by ISIN) is intentionally left untouched per the
+    design spec, so this is the one place in this phase that resolution
+    caching applies.
 
     Fails loud: any LLM/tool/verification error propagates uncaught,
     except a candidate whose proposed name has no real Direct-plan
@@ -139,13 +185,22 @@ async def mutual_fund_specialist_node(state: GraphState) -> SpecialistState:
     attaching a DIFFERENT fund's real NAV/metrics to a candidate shown
     under a different name), which are dropped - the same reject-early
     role _verify_ticker plays for the equity specialists. Cost control:
-    reject-early (empty gap list short-circuits before any model/toolset
-    setup; candidates are filtered to real gap categories and capped
-    before the expensive resolve/metrics/evaluate steps run).
+    reject-early (empty gap list short-circuits before any model/toolset/
+    store setup; candidates are filtered to real gap categories, then to
+    not-previously-rejected names, then capped, before the expensive
+    resolve/metrics/evaluate steps run; a previously-rejected scheme_code
+    is caught before NAV history is ever fetched).
     """
     gap_categories = _compute_mf_category_gaps(state["holdings_by_bucket"])
     if not gap_categories:
         return {"mutual_fund_candidates": []}
+
+    if store is None:
+        raise ValueError(
+            "mutual_fund_specialist_node requires a store (compile the graph with "
+            "store=... - see graph.py/get_memory_store); without it, rejected "
+            "candidates would be silently re-evaluated (and re-paid for) every run."
+        )
 
     model = get_specialist_model()
     mfapi_toolset = get_mfapi_toolset()
@@ -153,33 +208,58 @@ async def mutual_fund_specialist_node(state: GraphState) -> SpecialistState:
     holdings_summary = _summarize_mf_holdings(state["holdings_by_bucket"])
     gap_categories_text = ", ".join(gap_categories)
 
+    canonical_rejections = await _load_recent_rejections(store, REJECTED_MUTUAL_FUND_NS)
+    alias_rejections = await _load_recent_rejections(store, REJECTED_MUTUAL_FUND_BY_NAME_NS)
+
     async with mfapi_toolset, yfinance_toolset:
         generator = _build_candidate_generator(model)
-        generation_result = await generator.run(
-            f"Propose candidates for these gap categories: {gap_categories_text}"
-        )
+        prompt = f"Propose candidates for these gap categories: {gap_categories_text}"
+        if alias_rejections:
+            excluded = sorted({r.display_name for r in alias_rejections.values()})[:MAX_EXCLUSION_HINTS]
+            prompt += f"\nDo not propose these already-rejected funds: {', '.join(excluded)}."
+        generation_result = await generator.run(prompt)
         on_gap_candidates = _filter_to_gap_sectors(
             generation_result.output, gap_categories, key=lambda c: c.category
         )
-        capped_candidates = _apply_candidate_cap(on_gap_candidates, key=lambda c: c.category)
+        not_previously_rejected = _filter_previously_rejected(
+            on_gap_candidates,
+            alias_rejections,
+            key=lambda c: _normalize_scheme_name(c.scheme_name),
+        )
+        capped_candidates = _apply_candidate_cap(not_previously_rejected, key=lambda c: c.category)
 
         evaluator = _build_conviction_gate_evaluator(
             model, yfinance_toolset, holdings_summary, gap_categories_text
         )
         evaluations = []
         for candidate in capped_candidates:
-            try:
-                scheme_code, resolved_category, resolved_scheme_name = (
-                    await _resolve_scheme_by_name_and_direct_plan(candidate.scheme_name, mfapi_toolset)
+            normalized_name = _normalize_scheme_name(candidate.scheme_name)
+            cached_resolution = await _load_resolved_scheme(store, normalized_name)
+            if cached_resolution is not None:
+                scheme_code = cached_resolution["scheme_code"]
+                resolved_category = cached_resolution["category"]
+                resolved_scheme_name = cached_resolution["scheme_name"]
+            else:
+                try:
+                    scheme_code, resolved_category, resolved_scheme_name = (
+                        await _resolve_scheme_by_name_and_direct_plan(candidate.scheme_name, mfapi_toolset)
+                    )
+                except ValueError:
+                    continue
+                await _cache_resolved_scheme(
+                    store, normalized_name, scheme_code, resolved_category, resolved_scheme_name
                 )
-            except ValueError:
-                continue
 
             if not _category_matches_taxonomy(resolved_category, candidate.category):
                 # The search match's real category doesn't correspond to what
                 # was proposed - this isn't genuinely the same fund the LLM
                 # meant, so drop it rather than attach its real data to a
                 # candidate shown under the wrong name (Finding 1).
+                continue
+
+            if str(scheme_code) in canonical_rejections:
+                # The authoritative rejection filter: runs after resolution,
+                # before any paid evaluator call or NAV fetch.
                 continue
 
             history = await _fetch_nav_history(scheme_code, mfapi_toolset)
@@ -191,6 +271,51 @@ async def mutual_fund_specialist_node(state: GraphState) -> SpecialistState:
             eval_result = await evaluator.run(
                 f"Evaluate candidate: {resolved_scheme_name} (category: {candidate.category}).\n{metrics_text}"
             )
-            evaluations.append(eval_result.output.model_dump())
+            evaluation = CandidateEvaluation.from_verdict(
+                eval_result.output,
+                identifier=str(scheme_code),
+                identifier_kind="scheme_code",
+                display_name=resolved_scheme_name,
+            )
+            evaluations.append(evaluation.model_dump())
+
+            if evaluation.action != "Buy":
+                rejected_at = datetime.now(UTC).isoformat()
+                await _record_rejection(
+                    store,
+                    REJECTED_MUTUAL_FUND_NS,
+                    RejectedCandidate(
+                        identifier=evaluation.identifier,
+                        identifier_kind="scheme_code",
+                        specialist="mutual_fund",
+                        display_name=evaluation.display_name,
+                        group=candidate.category,
+                        action=evaluation.action,
+                        confidence=evaluation.confidence,
+                        risk_flags=evaluation.risk_flags,
+                        reasoning=evaluation.reasoning,
+                        rejected_at=rejected_at,
+                        thread_id=None,
+                        schema_version=1,
+                    ),
+                )
+                await _record_rejection(
+                    store,
+                    REJECTED_MUTUAL_FUND_BY_NAME_NS,
+                    RejectedCandidate(
+                        identifier=normalized_name,
+                        identifier_kind="scheme_name",
+                        specialist="mutual_fund",
+                        display_name=evaluation.display_name,
+                        group=candidate.category,
+                        action=evaluation.action,
+                        confidence=evaluation.confidence,
+                        risk_flags=evaluation.risk_flags,
+                        reasoning=evaluation.reasoning,
+                        rejected_at=rejected_at,
+                        thread_id=None,
+                        schema_version=1,
+                    ),
+                )
 
     return {"mutual_fund_candidates": evaluations}

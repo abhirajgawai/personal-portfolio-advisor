@@ -44,6 +44,12 @@ class RiskState(TypedDict):
 class SpecialistState(TypedDict):
     """State the new-buy specialist and holdings-analyzer nodes produce.
 
+    Every list below holds `CandidateEvaluation` dicts, which always
+    carry `identifier` + `identifier_kind` + `display_name` (the
+    verified identity of the instrument judged, set in node code from
+    real data, never by the LLM) alongside the verdict fields. Consumers
+    must key off `identifier`, never off list position.
+
     us_equity_etf_candidates: the US Equity/ETF Specialist's evaluated
         candidates, each a `CandidateEvaluation` dict.
     india_equity_candidates: the India Equity Specialist's evaluated
@@ -69,6 +75,12 @@ class GraphState(TypedDict):
     contribution and what their own tests assert against; this is what
     the compiled StateGraph itself uses as its state_schema, since
     StateGraph takes exactly one schema, not one per node.
+
+    Every `CandidateEvaluation` dict in the four candidate/evaluation
+    lists below carries `identifier` + `identifier_kind` +
+    `display_name` (see schemas.CandidateEvaluation) - the verified
+    identity of what was judged. Consumers key off `identifier`, never
+    off list position.
 
     Fields:
     holdings: the raw `latest_snapshot` rows from Research node.
