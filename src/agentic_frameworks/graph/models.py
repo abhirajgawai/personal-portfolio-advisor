@@ -41,31 +41,64 @@ def get_specialist_model() -> FallbackModel:
 
 
 # Synthesizer's own, separately-chosen model list (never inherited from the
-# specialists' FallbackModel by convenience - CLAUDE.md cost control rule
-# 1). See docs/superpowers/specs/2026-09-19-synthesizer-design.md "Model
-# Choice" and "Decisions" #1: the Synthesizer reconciles already-tool-
-# grounded specialist judgments rather than doing primary research, so a
-# free-first chain is proposed and accepted (2026-09-19 autonomous session,
-# reversible, logged for review) rather than the specialists' paid primary.
-SYNTHESIZER_MODEL_NAME = "nvidia/nemotron-3-super-120b-a12b:free"
-SYNTHESIZER_BACKUP_MODEL_NAME = "deepseek/deepseek-v4-flash-0731:free"
-SYNTHESIZER_PAID_TAIL_MODEL_NAME = "z-ai/glm-5.3-flash"
+# specialists' FallbackModel by convenience - CLAUDE.md cost control rule 1).
+#
+# REVISED 2026-09-19 after the real-model gate failed twice. The original
+# chain was free-first: nvidia/nemotron-3-super-120b-a12b:free ->
+# deepseek/deepseek-v4-flash-0731:free -> z-ai/glm-5.3-flash (paid tail).
+# It never once reached that paid tail, and could not have, for a reason
+# confirmed by reading the installed FallbackModel's source rather than
+# assuming:
+#
+#   FallbackModel.request() only advances to the next model when
+#   model.request() itself raises an exception its fallback_on handler
+#   accepts (default: ModelAPIError), or when an explicit response handler
+#   rejects a returned ModelResponse. Output-validation retries live a
+#   layer ABOVE that: pydantic-ai's agent graph counts them in
+#   _agent_graph.py's consume_output_retry() and, on exhaustion, raises
+#   UnexpectedModelBehavior("Exceeded maximum output retries (N)") - which
+#   subclasses AgentRunError, NOT ModelAPIError, and is raised outside
+#   FallbackModel entirely. So a model that answers HTTP-200 with JSON that
+#   won't validate burns Agent(retries=2) alone and kills the run; the rest
+#   of the chain is never consulted.
+#
+# That makes "put a reliable model later in the chain" worthless as a
+# reliability strategy for this failure mode - the ONLY thing that matters
+# is which model sits in the primary slot. Hence the revision below.
+#
+# The tradeoff, stated explicitly per cost control rule 1 (Abhi delegated
+# this specific call, so the reasoning is recorded here rather than left
+# implicit): the free reasoning model costs $0/run but produced malformed,
+# unparseable structured output twice out of two real attempts on this
+# schema (9 nested existing-holdings entries + new-buy entries) - it spends
+# most of its budget on internal reasoning and emits a compressed, garbled
+# final answer under the schema's brevity caps. z-ai/glm-5.3-flash costs
+# ~$0.002/run (~$0.06/month at one Temporal-scheduled run a day) and has
+# been the proven structured-output workhorse in this project since the
+# Phase 4/5 specialists. Paying ~6 paise a run to make the terminal node of
+# the graph actually return a report is the right trade: a $0 model that
+# fails is infinitely more expensive than a $0.002 model that works,
+# because every upstream specialist call in that run was paid for and
+# thrown away with it.
+SYNTHESIZER_MODEL_NAME = "z-ai/glm-5.3-flash"
+SYNTHESIZER_BACKUP_MODEL_NAME = "deepseek/deepseek-v4.1-flash"
 
 
 def get_synthesizer_model() -> FallbackModel:
     """Build the OpenRouter-backed model used by the Synthesizer node.
 
-    Three-model FallbackModel chain, tried in order on a real API error
-    (ModelAPIError, e.g. a 429 from an overloaded free pool - same pattern
-    Phase 4 proved live): SYNTHESIZER_MODEL_NAME (free) ->
-    SYNTHESIZER_BACKUP_MODEL_NAME (free) -> SYNTHESIZER_PAID_TAIL_MODEL_NAME
-    (cheap paid tail, so a free-pool outage degrades the run instead of
-    killing it). Not a silent default: the model list and the tradeoff it
-    accepts are documented in the design spec's Model Choice section.
+    Two-model FallbackModel chain, both paid and both already proven on
+    structured output in this project: SYNTHESIZER_MODEL_NAME (primary,
+    ~$0.002/run) -> SYNTHESIZER_BACKUP_MODEL_NAME (~$0.004/run). The
+    fallback here buys exactly one thing and no more - survival of a real
+    API-level outage on the primary (ModelAPIError, e.g. a 429), the same
+    pattern Phase 4 proved live. It deliberately does NOT try to paper over
+    a model that returns unvalidatable output, because FallbackModel
+    structurally cannot do that (see the module comment above); schema
+    reliability is bought by the primary-slot choice instead.
     """
     api_key = os.environ["OPENROUTER_API_KEY"]
     provider = OpenRouterProvider(api_key=api_key)
     primary = OpenRouterModel(SYNTHESIZER_MODEL_NAME, provider=provider)
     backup = OpenRouterModel(SYNTHESIZER_BACKUP_MODEL_NAME, provider=provider)
-    paid_tail = OpenRouterModel(SYNTHESIZER_PAID_TAIL_MODEL_NAME, provider=provider)
-    return FallbackModel(primary, backup, paid_tail)
+    return FallbackModel(primary, backup)

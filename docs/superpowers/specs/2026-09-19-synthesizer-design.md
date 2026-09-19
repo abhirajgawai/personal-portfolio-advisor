@@ -231,6 +231,8 @@ Fail loud, no `try`/`except` swallowing — same standard as every prior node.
 
 ## Model Choice (cost control rule 1 — needs Abhi's explicit call)
 
+> **SUPERSEDED 2026-09-19 by the real-model gate.** The three-model free-first chain proposed below was built, run for real, and failed twice on structured output; the shipped chain is now `z-ai/glm-5.3-flash` → `deepseek/deepseek-v4.1-flash` (both paid, both proven). The pricing table below is still accurate and still the reference for any future step-up. Full root cause, tradeoff and verification evidence: `HANDOFF.md`, Phase 8's REAL-MODEL GATE → RESOLUTION block.
+
 The Synthesizer is the most judgment-heavy node in the graph, but it is **not doing primary analysis**: every fundamentals, valuation, NAV, benchmark and redundancy judgment has already been made by a specialist that had real tool data. Its actual job is reconciliation, prioritization, allocation-level narrative, and holding the "avoid is the default" line. That is a synthesis task, not a research task — which is why the flagship tier is hard to justify here.
 
 Sizing: one call per run, roughly **8–12k input / 2–4k output tokens**.
