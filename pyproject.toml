@@ -14,6 +14,7 @@ dependencies = [
     "langgraph-cli>=0.4.31",
     "pydantic-ai>=2.42.0",
     "python-dotenv>=1.2.3",
+    "temporalio>=1.33.0",
 ]
 
 [project.scripts]

@@ -22,6 +22,7 @@ from contextlib import asynccontextmanager
 
 from langgraph.store.sqlite.aio import AsyncSqliteStore
 
+from agentic_frameworks.db_lock import advisor_memory_lock
 from agentic_frameworks.graph.checkpointer import AGENT_MEMORY_DB_PATH
 
 
@@ -33,8 +34,15 @@ async def get_memory_store() -> AsyncIterator[AsyncSqliteStore]:
     lazily on first `aput` against a brand-new file (live-verified) -
     but it is called explicitly here so the schema exists
     deterministically before the first *read*, per the design spec.
+
+    Acquires the same process-wide OS advisory lock as
+    get_checkpointer() (db_lock.py) - re-entrant, since both functions
+    lock the same resolved AGENT_MEMORY_DB_PATH, so a real run opening
+    both together (as every real run does) takes the real OS lock once,
+    not twice (design spec Architecture 3).
     """
     AGENT_MEMORY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    async with AsyncSqliteStore.from_conn_string(str(AGENT_MEMORY_DB_PATH)) as store:
-        await store.setup()
-        yield store
+    with advisor_memory_lock(AGENT_MEMORY_DB_PATH):
+        async with AsyncSqliteStore.from_conn_string(str(AGENT_MEMORY_DB_PATH)) as store:
+            await store.setup()
+            yield store
