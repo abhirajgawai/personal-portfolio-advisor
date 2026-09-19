@@ -297,6 +297,62 @@ def test_synthesized_new_buy_rejects_zero_or_negative_position_size():
         _synthesized_new_buy(position_size_pct_of_portfolio=0.0)
 
 
+def test_synthesized_new_buy_rejects_too_many_risk_flags():
+    from agentic_frameworks.graph.schemas import RISK_FLAGS_MAX_ITEMS
+
+    with pytest.raises(ValidationError):
+        _synthesized_new_buy(risk_flags=[f"flag {i}" for i in range(RISK_FLAGS_MAX_ITEMS + 1)])
+
+
+def test_synthesized_new_buy_rejects_an_overlong_risk_flag():
+    from agentic_frameworks.graph.schemas import RISK_FLAG_MAX_CHARS
+
+    with pytest.raises(ValidationError):
+        _synthesized_new_buy(risk_flags=["x" * (RISK_FLAG_MAX_CHARS + 1)])
+
+
+def test_synthesized_holding_guidance_rejects_too_many_risk_flags():
+    from agentic_frameworks.graph.schemas import RISK_FLAGS_MAX_ITEMS
+
+    with pytest.raises(ValidationError):
+        _synthesized_holding_guidance(
+            risk_flags=[f"flag {i}" for i in range(RISK_FLAGS_MAX_ITEMS + 1)]
+        )
+
+
+def test_synthesized_new_buy_rejects_an_overlong_rationale():
+    from agentic_frameworks.graph.schemas import RATIONALE_MAX_CHARS
+
+    with pytest.raises(ValidationError):
+        _synthesized_new_buy(rationale="x" * (RATIONALE_MAX_CHARS + 1))
+
+
+def test_synthesized_recommendation_rejects_an_overlong_portfolio_assessment():
+    from agentic_frameworks.graph.schemas import PORTFOLIO_ASSESSMENT_MAX_CHARS, SynthesizedRecommendation
+
+    with pytest.raises(ValidationError):
+        SynthesizedRecommendation(
+            portfolio_assessment="x" * (PORTFOLIO_ASSESSMENT_MAX_CHARS + 1),
+            allocation_notes=[],
+            existing_holdings_guidance=[],
+            new_buy_suggestions=[],
+            no_new_buy_reason="no candidates this cycle",
+        )
+
+
+def test_synthesized_recommendation_rejects_an_overlong_allocation_note():
+    from agentic_frameworks.graph.schemas import ALLOCATION_NOTE_MAX_CHARS, SynthesizedRecommendation
+
+    with pytest.raises(ValidationError):
+        SynthesizedRecommendation(
+            portfolio_assessment="Balanced.",
+            allocation_notes=["x" * (ALLOCATION_NOTE_MAX_CHARS + 1)],
+            existing_holdings_guidance=[],
+            new_buy_suggestions=[],
+            no_new_buy_reason="no candidates this cycle",
+        )
+
+
 def test_synthesized_recommendation_enforces_max_new_buy_suggestions_cap():
     from agentic_frameworks.graph.schemas import MAX_NEW_BUY_SUGGESTIONS, SynthesizedRecommendation
 

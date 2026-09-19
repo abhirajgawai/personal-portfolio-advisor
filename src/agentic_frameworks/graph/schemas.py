@@ -7,7 +7,7 @@ schema - no freeform text leaks through unvalidated, per plan.md.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -204,6 +204,30 @@ MAX_NEW_BUY_SUGGESTIONS = 5
 MAX_EXISTING_HOLDINGS_GUIDANCE = 15
 ALLOCATION_NOTES_CAP = 8
 
+# Per-string length caps on free-text fields, added 2026-09-19 after a real
+# model run genuinely exceeded pydantic-ai's bounded output retries
+# (UnexpectedModelBehavior) - the model produced 6-9 risk_flags per holding
+# across 9 holdings plus 2 new-buy candidates, each flag hundreds of
+# characters long, and the response was truncated mid-JSON before the
+# output parser ever got a chance to validate it. Unbounded free-text
+# fields are exactly the "soft guidance" CLAUDE.md's cost-control rule 5
+# warns against - a verbose model can blow the output token budget before
+# a single ModelRetry is even possible, since retries only fire on a
+# *validation* failure, not a truncated-response failure. These caps make
+# the failure mode itself (running out of output tokens) far less likely,
+# on top of the pre-existing hard caps on how many items a list may hold.
+RISK_FLAGS_MAX_ITEMS = 4
+RISK_FLAG_MAX_CHARS = 220
+RATIONALE_MAX_CHARS = 400
+GAP_ADDRESSED_MAX_CHARS = 200
+PORTFOLIO_ASSESSMENT_MAX_CHARS = 1200
+ALLOCATION_NOTE_MAX_CHARS = 220
+
+RiskFlag = Annotated[str, Field(max_length=RISK_FLAG_MAX_CHARS)]
+RiskFlagList = Annotated[list[RiskFlag], Field(max_length=RISK_FLAGS_MAX_ITEMS)]
+Rationale = Annotated[str, Field(max_length=RATIONALE_MAX_CHARS)]
+AllocationNote = Annotated[str, Field(max_length=ALLOCATION_NOTE_MAX_CHARS)]
+
 # Position-sizing bounds. Per-suggestion (MAX_NEW_POSITION_PCT) is enforced
 # right here in the schema; the run-aggregate (MAX_NEW_CAPITAL_PCT) is
 # enforced in code in the Synthesizer's output_validator (nodes/
@@ -233,8 +257,8 @@ class SynthesizedHoldingGuidance(BaseModel):
 
     identifier: str
     action: Literal["Hold", "AddTo", "Reduce", "Sell"]
-    rationale: str
-    risk_flags: list[str]
+    rationale: Rationale
+    risk_flags: RiskFlagList
     confidence: float = Field(ge=0.0, le=1.0)
 
 
@@ -251,12 +275,12 @@ class SynthesizedNewBuy(BaseModel):
     """
 
     identifier: str
-    rationale: str
-    gap_addressed: str
+    rationale: Rationale
+    gap_addressed: Annotated[str, Field(max_length=GAP_ADDRESSED_MAX_CHARS)]
     position_size_pct_of_portfolio: float = Field(gt=0.0, le=MAX_NEW_POSITION_PCT)
     entry_approach: Literal["LumpSum", "Staggered"]
     suggested_platform: str
-    risk_flags: list[str]
+    risk_flags: RiskFlagList
     confidence: float = Field(ge=0.0, le=1.0)
 
 
@@ -276,8 +300,10 @@ class SynthesizedRecommendation(BaseModel):
     Architecture point 4).
     """
 
-    portfolio_assessment: str
-    allocation_notes: list[str] = Field(max_length=ALLOCATION_NOTES_CAP)
+    portfolio_assessment: Annotated[str, Field(max_length=PORTFOLIO_ASSESSMENT_MAX_CHARS)]
+    allocation_notes: Annotated[
+        list[AllocationNote], Field(max_length=ALLOCATION_NOTES_CAP)
+    ]
     existing_holdings_guidance: list[SynthesizedHoldingGuidance] = Field(
         max_length=MAX_EXISTING_HOLDINGS_GUIDANCE
     )

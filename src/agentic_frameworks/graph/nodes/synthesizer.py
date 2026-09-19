@@ -16,6 +16,7 @@ from typing import NamedTuple, Optional
 
 from langgraph.store.base import BaseStore
 from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.settings import ModelSettings
 
 from agentic_frameworks.graph.models import get_synthesizer_model
 from agentic_frameworks.graph.nodes._candidate_memory import (
@@ -312,7 +313,13 @@ within the stated per-suggestion cap.
 
 This is advisory only - your output is never a trade instruction, only a \
 recommendation for the user to act on manually. Long-term investing only - \
-never day-trading, options, or market-timing language."""
+never day-trading, options, or market-timing language.
+
+Be concise. For each holding or suggestion give at most 4 risk_flags, each \
+one short sentence. Keep every rationale to 2-3 sentences and the overall \
+portfolio_assessment to one tight paragraph. This is a hard requirement, \
+not a style preference - a response that runs long risks being cut off \
+before it can be returned at all."""
 
 
 def _build_synthesizer_agent(
@@ -338,6 +345,17 @@ def _build_synthesizer_agent(
         output_type=SynthesizedRecommendation,
         system_prompt=_SYNTHESIZER_SYSTEM_PROMPT,
         retries=2,
+        # A real run (2026-09-19) exceeded output retries because the raw
+        # response was truncated mid-JSON before validation ever ran - a
+        # completion-length problem, not a schema-shape one. The prompt's
+        # brevity instruction and the schema's new per-field length caps
+        # (schemas.py: RISK_FLAG_MAX_CHARS etc.) are the primary fix; this
+        # is the secondary safety net, giving the model enough budget to
+        # actually finish a full report even before it fully internalizes
+        # "be concise" (retries=2 only helps once a response is complete
+        # enough to parse and fail *validation* - it does nothing for a
+        # response cut off mid-stream).
+        model_settings=ModelSettings(max_tokens=24000),
     )
 
     @agent.output_validator
