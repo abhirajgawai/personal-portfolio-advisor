@@ -1,6 +1,6 @@
 # Portfolio Advisor Fleet — Plan A (LangGraph Stack)
 
-Full plan: `plan.md` in this repo (mirrors `C:\Users\Abhiraj Gautam Gavai\.claude\plans\where-it-lives-concurrent-globe.md`).
+Full plan: `plans/plan.md` in this repo.
 
 ## Working mode: explain-as-you-go, no vibe coding
 

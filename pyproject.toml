@@ -1,7 +1,7 @@
 [project]
 name = "agentic-frameworks"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-agent portfolio advisor (LangGraph, Pydantic AI, MCP, Temporal). Advisory only."
 authors = [
     { name = "Abhiraj Gavai", email = "abhirajgawai@gmail.com" }
 ]
